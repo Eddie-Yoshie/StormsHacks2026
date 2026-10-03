@@ -1,0 +1,8 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    container_name: mediamtx
+    network_mode: host # required for WebRTC (UDP/ICE)
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    restart: unless-stopped
