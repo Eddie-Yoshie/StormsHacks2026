@@ -28,6 +28,16 @@ def set_active_device(name: Annotated[str, Body(embed=True)]) -> dict[str, str]:
     return {"active_device": name}
 
 
+@router.get("/active/webrtc")
+def get_active_webrtc_url() -> dict[str, str]:
+    """Return the WebRTC URL of the stream for the active device."""
+    name = state["active_device"]
+    if not name:
+        raise HTTPException(status_code=404, detail="No active device")
+    return {"name": name, "webrtc_url": streams.get_webrtc_url(name)}
+
+
+
 @router.post("", status_code=201)
 def add_device(
     name: Annotated[str, Body()], rtsp_url: Annotated[str, Body()]

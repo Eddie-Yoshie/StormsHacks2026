@@ -16,7 +16,11 @@ def add_stream(name: str, rtsp_url: str) -> dict[str, Any]:
     payload: dict[str, Any] = {"source": rtsp_url, "sourceOnDemand": True}
     response = requests.post(f"{base_url}/add/{name}", json=payload, timeout=5)
     response.raise_for_status()
-    return {"name": name, "webrtc_url": f"{base_webrtc_url}/{name}"}
+    return {"name": name, "webrtc_url": get_webrtc_url(name)}
+
+
+def get_webrtc_url(name: str) -> str:
+    return f"{base_webrtc_url}/{name}"
 
 
 def delete_stream(name: str) -> None:
