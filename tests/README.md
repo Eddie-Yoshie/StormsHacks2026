@@ -3,7 +3,14 @@
 ## to init your webcam, and to find the respective RTSP URL:
 you will end up w a command that looks like this:
 
-`/mnt/c/Users/mtfp64/Documents/ffmpeg-8.1.1-essentials_build/bin/ffmpeg.exe -f dshow -i video="HP 5MP Camera" -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -f rtsp rtsp://172.25.36.229:8554/webcam`
+```
+/mnt/c/Users/mtfp64/Documents/ffmpeg-8.1.1-essentials_build/bin/ffmpeg.exe \
+  -rtbufsize 500M \
+  -f dshow -i video="HP 5MP Camera" \
+  -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+  -rtsp_transport tcp \
+  -f rtsp rtsp://172.25.36.229:8554/webcam
+```
 
 there are three changes you will need to make:
 * `{path_to_windows_ffmpeg.exe}`: self explanatory. make sure it is formatted for linux and not windows
@@ -12,6 +19,13 @@ there are three changes you will need to make:
 
 place them in the following command in their respective positions:
 
-`{path_to_windows_ffmpeg.exe} -f dshow -i video="{webcam_hardware_name}" -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -f rtsp rtsp://{wsl_IP}:8554/webcam`
+```
+{path_to_windows_ffmpeg.exe} \
+  -rtbufsize 500M \
+  -f dshow -i video="{webcam_hardware_name}" \
+  -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+  -rtsp_transport tcp \
+  -f rtsp rtsp://{wsl_IP}:8554/webcam
+```
 
-and you will get an rtsp stream that looks like `'rtsp://172.25.36.229:8554/webcam'` or `'rtsp://{wsl_IP}:8554/webcam'`
+and you will get an rtsp stream that looks like that last lil section above
