@@ -1,3 +1,7 @@
 requests
 fastapi
 uvicorn
+websockets
+# Local fall detection (vision/). mediapipe brings opencv-contrib-python; don't also install opencv-python.
+mediapipe
+numpy
