@@ -1,0 +1,15 @@
+# MediaMTX configuration for local development with the frontend.
+# The Vite dev server runs on http://localhost:5173; allow its WHEP requests.
+
+webrtcAllowOrigins: ["*"]
+
+# Advertise loopback AND the LAN IP as ICE candidates. Firefox ignores
+# loopback candidates (media.peerconnection.ice.loopback defaults off),
+# so browsers must reach MediaMTX over the LAN address.
+webrtcAdditionalHosts: ["127.0.0.1", "172.16.184.203"]
+
+paths:
+  # Any RTSP publisher may push to /<name>; camera paths are also configured
+  # here (or later via the backend through the MediaMTX API).
+  all_others:
+    source: publisher
