@@ -3,3 +3,6 @@ mediamtx/*
 
 # For debugging with AI
 .playwright/
+.direnv/
+mediamtx/*
+backend/__pycache__/*
