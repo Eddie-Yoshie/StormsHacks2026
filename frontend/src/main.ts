@@ -16,6 +16,13 @@ import {
   NSpace,
   NSpin,
   NTag,
+  NDropdown,
+  NLayoutSider,
+  NMenu,
+  NModal,
+  NForm,
+  NInput,
+  NFormItem,
 } from 'naive-ui';
 import App from './App.vue';
 
@@ -35,6 +42,13 @@ const naive = create({
     NSpace,
     NSpin,
     NTag,
+    NDropdown,
+    NLayoutSider,
+    NMenu,
+    NModal,
+    NForm,
+    NInput,
+    NFormItem,
   ],
 });
 
