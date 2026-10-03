@@ -1,5 +1,7 @@
 from typing import Any
+import cv2
 
+from cv2.typing import MatLike
 import requests
 
 # not entirely sure if we need all of these, but keeping in case
@@ -20,3 +22,15 @@ def add_stream(name: str, rtsp_url: str) -> dict[str, Any]:
 def delete_stream(name: str) -> None:
     response = requests.delete(f"{base_url}/remove/{name}", timeout=5)
     response.raise_for_status()
+
+
+def pull_frame(name: str) -> MatLike:
+    """Pull a single frame from the RTSP stream associated with the given device name."""
+    cap = cv2.VideoCapture(f"{internal_access_url}/{name}")
+    if not cap.isOpened():
+        raise RuntimeError(f"Failed to open stream for device {name!r}")
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        raise RuntimeError(f"Failed to pull frame from device {name!r}")
+    return frame

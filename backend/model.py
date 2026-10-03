@@ -9,9 +9,23 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 # global appstate; stores active camera and list of cameras with a flag list
 state: dict[str, Any] = {
-    "active_device": "",
+    "active_device": "", # tuple[str, list[bool]]
     "device_list": {},  # dict[str, list[bool]]
 }
+
+
+def get_state() -> dict[str, Any]:
+    """Accessor for the global app state, returns pertinent information."""
+    return state
+
+
+@router.put("/active")
+def set_active_device(name: Annotated[str, Body(embed=True)]) -> dict[str, str]:
+    """Make an existing device the active one."""
+    if name not in state["device_list"]:
+        raise HTTPException(status_code=404, detail=f"No device named {name!r}")
+    state["active_device"] = name
+    return {"active_device": name}
 
 
 @router.post("", status_code=201)
