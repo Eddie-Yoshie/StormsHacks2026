@@ -4,9 +4,12 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Any
+from typing import Annotated, Any
 
 import requests
+from fastapi import APIRouter, Body, HTTPException
+
+router = APIRouter(prefix="/streams", tags=["streams"])
 
 base_url = "http://localhost:9997/v3/config/paths"
 status_url = "http://localhost:9997/v3/paths"
@@ -54,17 +57,23 @@ def _ffmpeg_input_args() -> list[str]:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")
 
 
-def start_webcam_stream(name: str = "webcam") -> str:
+@router.post("/webcam/{name}", status_code=201)
+def start_webcam_stream(name: str) -> str:
     """Publish the host webcam to MediaMTX via ffmpeg and return its RTSP URL."""
     if shutil.which("ffmpeg") is None:
-        raise RuntimeError("ffmpeg is not installed")
-    if name in _publishers and _publishers[name].poll() is None:
-        return f"{internal_access_url}/{name}"
-
+        raise HTTPException(status_code=500, detail="ffmpeg is not installed")
     url = f"{internal_access_url}/{name}"
+    if name in _publishers and _publishers[name].poll() is None:
+        return url
+
+    try:
+        input_args = _ffmpeg_input_args()
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
     cmd = [
         "ffmpeg", "-loglevel", "error",
-        *_ffmpeg_input_args(),
+        *input_args,
         "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-pix_fmt", "yuv420p",
         "-f", "rtsp", "-rtsp_transport", "tcp", url,
     ]
@@ -74,19 +83,37 @@ def start_webcam_stream(name: str = "webcam") -> str:
     except subprocess.TimeoutExpired:
         _publishers[name] = proc
         return url
-    raise RuntimeError(f"ffmpeg exited: {err.decode(errors='replace').strip()}")
+    raise HTTPException(status_code=502, detail=f"ffmpeg exited: {err.decode(errors='replace').strip()}")
 
 
-def stop_webcam_stream(name: str = "webcam") -> None:
+@router.delete("/webcam/{name}", status_code=204)
+def stop_webcam_stream(name: str) -> None:
     proc = _publishers.pop(name, None)
-    if proc is not None and proc.poll() is None:
+    if proc is None:
+        raise HTTPException(status_code=404, detail=f"No webcam stream named {name!r}")
+    if proc.poll() is None:
         proc.terminate()
         proc.wait(timeout=5)
 
 
-def add_stream(name: str, rtsp_url: str) -> dict[str, Any]:
+@router.post("", status_code=201)
+def add_stream(
+    name: Annotated[str, Body()], rtsp_url: Annotated[str, Body()]
+) -> dict[str, Any]:
     """Register an RTSP device stream with MediaMTX under the given path name."""
     payload: dict[str, Any] = {"source": rtsp_url, "sourceOnDemand": True}
-    response = requests.post(f"{base_url}/add/{name}", json=payload, timeout=5)
-    response.raise_for_status()
+    try:
+        response = requests.post(f"{base_url}/add/{name}", json=payload, timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
     return {"name": name, "webrtc_url": f"{base_webrtc_url}/{name}"}
+
+@router.delete("/{name}", status_code=204)
+def delete_stream(name: str) -> None:
+    try:
+        response = requests.delete(f"{base_url}/remove/{name}", timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
+    return None
