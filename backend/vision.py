@@ -12,6 +12,7 @@ class FallEventIn(BaseModel):
     camera_id: str
     ts: float
     confidence: Literal["high", "low"]
+    kind: Literal["fall", "bathroom_timeout"] = "fall"
     details: dict[str, Any] = {}
 
 
@@ -22,7 +23,7 @@ _next_id = 1
 
 @router.post("/events", status_code=201)
 async def add_event(event: FallEventIn) -> dict[str, Any]:
-    """Record a fall event from the local vision worker and push it to connected dashboards."""
+    """Record a fall or bathroom-timeout event from the local vision worker and push it to connected dashboards."""
     global _next_id
     stored = {"id": _next_id, "received_at": time.time(), **event.model_dump()}
     _next_id += 1
