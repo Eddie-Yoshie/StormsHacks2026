@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Annotated, Any
 import logging
 import threading
@@ -39,6 +40,10 @@ def raise_flag(name: str, index: int) -> None:
     flags.extend([False] * (index + 1 - len(flags)))  # rows saved before more flags existed are shorter
     flags[index] = True
 
+def clear_flags(name: str) -> None:
+    if name in state["device_list"]:
+        state["device_list"][name] = [False] * FLAG_COUNT
+
 # watchers
 def _on_loud(name: str, level_db: float) -> None:
     raise_flag(name, NOISE_FLAG)
@@ -56,6 +61,12 @@ def _stop_noise_watcher(name: str) -> None:
     stop = _noise_watchers.pop(name, None)
     if stop is not None:
         stop.set()
+
+def start_noise_watchers(names: Iterable[str]) -> None:
+    """Start a noise watcher for each device not already being watched (e.g. on backend startup)."""
+    for name in names:
+        if name not in _noise_watchers:
+            _start_noise_watcher(name)
 
 def _checked_active_flags(active_flags: list[bool] | None) -> list[bool]:
     flags = list(DEFAULT_ACTIVE_FLAGS) if active_flags is None else list(active_flags)
@@ -76,7 +87,8 @@ def get_state(db: SessionDependency) -> dict[str, Any]:
         if name in device_list:
             device_list[name] = flags
     state["device_list"] = device_list
-    return {"state": read_state()}
+    active_flags = {device.name: list(device.active_flags or DEFAULT_ACTIVE_FLAGS) for device in devices}
+    return {"state": read_state(), "active_flags": active_flags}
 
 @router.put("/active")
 def set_active_device(name: Annotated[str, Body(embed=True)]) -> dict[str, str]:

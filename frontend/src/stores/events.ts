@@ -2,16 +2,15 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { Event } from '../types/event';
 import { createEventProvider } from '../services/eventProvider';
+import { createPoller } from '../lib/poll';
 
 export const useEventsStore = defineStore('events', () => {
   const events = ref<Event[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let fetching = false;
-  let stopped = true;
-  let pollIntervalMs = 1000;
+  let poller: ReturnType<typeof createPoller> | null = null;
 
   async function fetchEvents(): Promise<void> {
     if (fetching) {
@@ -30,32 +29,18 @@ export const useEventsStore = defineStore('events', () => {
     }
   }
 
-  async function poll(): Promise<void> {
-    if (stopped) {
-      return;
-    }
-    await fetchEvents();
-    if (!stopped) {
-      pollTimer = setTimeout(() => void poll(), pollIntervalMs);
-    }
-  }
-
   function startPolling(intervalMs = 1000): void {
-    if (!stopped) {
+    if (poller !== null) {
       return;
     }
-    stopped = false;
-    pollIntervalMs = intervalMs;
     loading.value = true;
-    void poll();
+    poller = createPoller(fetchEvents, intervalMs);
+    poller.start();
   }
 
   function stopPolling(): void {
-    stopped = true;
-    if (pollTimer !== null) {
-      clearTimeout(pollTimer);
-      pollTimer = null;
-    }
+    poller?.stop();
+    poller = null;
   }
 
   return { events, loading, error, fetchEvents, startPolling, stopPolling };

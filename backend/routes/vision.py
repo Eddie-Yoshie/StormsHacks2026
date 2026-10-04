@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.dependencies.database import SessionDependency
-from backend.routes.devices import FIRST_VISION_FLAG, raise_flag
+from backend.routes.devices import FIRST_VISION_FLAG, clear_flags, raise_flag, state as device_state
 from database.models import Event
 from vision.flags import ACTIVE_INDEX_BY_KIND
 
@@ -30,6 +30,15 @@ class FallEventIn(BaseModel):
 
 _events: deque[dict[str, Any]] = deque(maxlen=500)
 _clients: set[WebSocket] = set()
+_open_alerts: dict[str, dict[str, Any]] = {}  # camera_id -> latest unacknowledged event
+
+
+async def _broadcast(message: dict[str, Any]) -> None:
+    for ws in list(_clients):
+        try:
+            await ws.send_json(message)
+        except Exception:
+            _clients.discard(ws)
 
 
 def _store_event(db: Session, event: FallEventIn) -> int:
@@ -59,14 +68,11 @@ async def add_event(event: FallEventIn, db: SessionDependency) -> dict[str, Any]
         raise HTTPException(status_code=500, detail="Could not store event")
     stored = {"id": event_id, "received_at": time.time(), **event.model_dump()}
     _events.append(stored)
+    _open_alerts[event.camera_id] = stored
     index = ACTIVE_INDEX_BY_KIND.get(event.kind)
     if index is not None:
         raise_flag(event.camera_id, FIRST_VISION_FLAG + index)
-    for ws in list(_clients):
-        try:
-            await ws.send_json({"type": "fall", "event": stored})
-        except Exception:
-            _clients.discard(ws)
+    await _broadcast({"type": "fall", "event": stored})
     return stored
 
 
@@ -76,11 +82,23 @@ def list_events() -> list[dict[str, Any]]:
     return list(reversed(_events))
 
 
+@router.post("/alerts/{camera_id}/ack", status_code=204)
+async def ack_alert(camera_id: str) -> None:
+    """A nurse handled the camera's alert: clear its flags and drop the alert from every dashboard."""
+    _open_alerts.pop(camera_id, None)
+    clear_flags(camera_id)
+    await _broadcast({"type": "ack", "camera_id": camera_id})
+
+
 @router.websocket("/ws")
 async def events_socket(ws: WebSocket) -> None:
     await ws.accept()
     _clients.add(ws)
     try:
+        # Replay alerts nobody has acknowledged yet, so a dashboard opened late still shows them.
+        for camera_id, stored in list(_open_alerts.items()):
+            if camera_id in device_state["device_list"]:
+                await ws.send_json({"type": "fall", "event": stored})
         while True:
             await ws.receive_text()  # dashboards don't send anything; this just detects disconnects
     except WebSocketDisconnect:

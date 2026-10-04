@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import { ackAlert, apiBaseUrl as apiBase } from '../services/api';
 
 export interface FallEvent {
   id: number;
@@ -10,7 +11,16 @@ export interface FallEvent {
   details: Record<string, unknown>;
 }
 
-const apiBase: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const KIND_LABELS: Record<string, { tag: string; type: 'error' | 'warning' | 'info' }> = {
+  fall: { tag: 'FALL', type: 'error' },
+  dead_check: { tag: 'NO MOVEMENT', type: 'error' },
+  bathroom_timeout: { tag: 'BATHROOM', type: 'warning' },
+};
+
+/** Short tag and color for an event kind, for lists such as the event history. */
+export function kindLabel(kind: string): { tag: string; type: 'error' | 'warning' | 'info' } {
+  return KIND_LABELS[kind] ?? { tag: kind.toUpperCase(), type: 'info' };
+}
 
 /** Headline text for an alert, shared by the camera card and the front-desk notification. */
 export function describeAlert(event: FallEvent): { tag: string; title: string; detail: string } {
@@ -40,10 +50,15 @@ function connect(): void {
   const url = `${apiBase.replace(/^http/, 'ws').replace(/\/+$/, '')}/vision/ws`;
   const socket = new WebSocket(url);
   socket.onmessage = (msg) => {
-    const data = JSON.parse(msg.data as string) as { type: string; event: FallEvent };
+    const data = JSON.parse(msg.data as string) as
+      | { type: 'fall'; event: FallEvent }
+      | { type: 'ack'; camera_id: string };
     if (data.type === 'fall') {
       falls[data.event.camera_id] = data.event;
       listeners.forEach((fn) => fn(data.event));
+    } else if (data.type === 'ack') {
+      // Acknowledged on this or another dashboard.
+      delete falls[data.camera_id];
     }
   };
   socket.onclose = () => {
@@ -59,8 +74,10 @@ export function useFallEvents() {
     connect();
   }
 
+  /** Acknowledge the camera's alert: hide it here right away and clear it on the backend for every dashboard. */
   function dismiss(cameraId: string): void {
     delete falls[cameraId];
+    ackAlert(cameraId).catch((e: unknown) => console.warn('Could not acknowledge alert', e));
   }
 
   /** Call fn for every new alert as it arrives; returns an unsubscribe function. */
