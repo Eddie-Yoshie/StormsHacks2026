@@ -3,7 +3,7 @@ from typing import Annotated, Any
 import requests
 from fastapi import APIRouter, Body, HTTPException
 
-from backend import streams
+from routes import streams
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
