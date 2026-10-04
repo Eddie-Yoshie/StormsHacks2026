@@ -5,13 +5,13 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, declarative_base
 
 SERVER_URL = os.environ.get("DATABASE_URL", "mysql+pymysql://root@127.0.0.1:4000");
-server_engine = create_engine(SERVER_URL, echo=True)
+server_engine = create_engine(SERVER_URL, echo=False)
 with server_engine.begin() as conn:
     conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS ok")
 server_engine.dispose()
 
 db_url = make_url(SERVER_URL + "/ok")
-engine = create_engine(db_url, echo=True)
+engine = create_engine(db_url, echo=False)
 
 # base class for models
 base = declarative_base()
