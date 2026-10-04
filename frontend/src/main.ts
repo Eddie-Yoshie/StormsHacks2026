@@ -25,6 +25,7 @@ import {
   NInput,
   NFormItem,
   NNotificationProvider,
+  NGlobalStyle,
   NCheckbox,
   NSwitch,
 } from 'naive-ui';
@@ -55,6 +56,7 @@ const naive = create({
     NInput,
     NFormItem,
     NNotificationProvider,
+    NGlobalStyle,
     NCheckbox,
     NSwitch,
   ],
