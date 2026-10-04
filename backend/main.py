@@ -2,8 +2,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.model import router as devices_router
-from backend.vision import router as vision_router
+from routes.model import router as devices_router
+from routes.vision import router as vision_router
 
 app = FastAPI()
 app.add_middleware(

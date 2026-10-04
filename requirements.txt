@@ -6,3 +6,4 @@ websockets
 # backend/streams.py; don't also install opencv-python (both install cv2 and clobber each other).
 mediapipe
 numpy
+av

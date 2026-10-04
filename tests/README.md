@@ -4,7 +4,7 @@
 ### Initializing Webcam as RTSP Stream
 There are three changes you will need to make:
 * `{path_to_windows_ffmpeg.exe}`: self explanatory, make sure it is formatted for Linux and not Windows
-* `{webcam_hardware_name}`: call `/mnt/c/Users/mtfp64/Documents/ffmpeg-8.1.1-essentials_build/bin/ffmpeg.exe -list_devices true -f dshow -i dummy` in WSL2, find the name of your webcam.
+* `{webcam_hardware_name}`: call `/mnt/c/Users/mtfp64/Documents/ffmpeg-8.1.1-essentials_build/bin/ffmpeg.exe -list_devices true -f dshow -i dummy` in WSL2, find the name of your webcam and mic.
 * `{wsl_IP}`: call `hostname -I` and use the first IP in the list.
 
 Place them in the following command, in their respective positions:
@@ -12,7 +12,7 @@ Place them in the following command, in their respective positions:
 ```bash
 {path_to_windows_ffmpeg.exe} \
   -rtbufsize 500M \
-  -f dshow -i video="{webcam_hardware_name}" \
+  -f dshow -i video="{webcam_hardware_name}":audio="Microphone Array (Intel® Smart Sound Technology for Digital Microphones)" \
   -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
   -rtsp_transport tcp \
   -f rtsp rtsp://{wsl_IP}:8554/webcam
