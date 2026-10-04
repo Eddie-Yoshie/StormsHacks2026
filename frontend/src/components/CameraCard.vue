@@ -3,7 +3,7 @@ import { computed, ref, useTemplateRef } from 'vue';
 import { useCameraStream, type StreamStatus } from '../composables/useCameraStream';
 import { describeAlert, useFallEvents } from '../composables/useFallEvents';
 import { useCamerasStore } from '../stores/cameras';
-import { setActiveFlags } from '../services/api';
+import { setActiveFlags, setNoiseEnabled } from '../services/api';
 import {
   BATHROOM_ACTIVE,
   DEAD_ACTIVE,
@@ -57,6 +57,23 @@ async function toggleDetector(index: number, on: boolean): Promise<void> {
     detectorError.value = e instanceof Error ? e.message : String(e);
   } finally {
     pendingDetectors.value = null;
+  }
+}
+
+// Noise detection runs in the backend, so its toggle is quick and independent of the vision container.
+const pendingNoise = ref<boolean | null>(null);
+const noiseOn = computed(() => pendingNoise.value ?? props.camera.noiseEnabled);
+
+async function toggleNoise(on: boolean): Promise<void> {
+  pendingNoise.value = on;
+  detectorError.value = null;
+  try {
+    await setNoiseEnabled(props.camera.id, on);
+    store.setCameraNoiseEnabled(props.camera.id, on);
+  } catch (e) {
+    detectorError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    pendingNoise.value = null;
   }
 }
 
@@ -129,6 +146,11 @@ function fullscreen(): void {
           <n-switch size="small" :value="detectors[i]" :disabled="savingDetectors"
             @update:value="(on: boolean) => toggleDetector(i, on)" />
           {{ label }}
+        </label>
+        <label class="detector">
+          <n-switch size="small" :value="noiseOn" :disabled="pendingNoise !== null"
+            @update:value="(on: boolean) => toggleNoise(on)" />
+          Loud noise
         </label>
         <n-spin v-if="savingDetectors" size="small" />
       </n-space>
