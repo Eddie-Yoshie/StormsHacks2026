@@ -3,7 +3,7 @@ from typing import Annotated, Any
 import requests
 from fastapi import APIRouter, Body, HTTPException
 
-from backend import streams
+from routes import streams
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -13,10 +13,15 @@ state: dict[str, Any] = {
     "device_list": {},  # dict[str, list[bool]]
 }
 
+ 
+def read_state() -> dict[str, Any]:
+    return state
 
+
+@router.get("/state")
 def get_state() -> dict[str, Any]:
     """Accessor for the global app state, returns pertinent information."""
-    return state
+    return {"state": read_state()}
 
 
 @router.put("/active")
