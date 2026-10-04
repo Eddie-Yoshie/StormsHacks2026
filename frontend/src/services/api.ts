@@ -17,8 +17,8 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
 
 const devicePath = (name: string): string => `/devices/${encodeURIComponent(name)}`;
 
-export async function addDevice(name: string, rtspUrl: string, activeFlags: boolean[]): Promise<void> {
-  await send('POST', '/devices', { name, rtsp_url: rtspUrl, active_flags: activeFlags });
+export async function addDevice(name: string, rtspUrl: string, activeFlags: boolean[], noiseEnabled: boolean): Promise<void> {
+  await send('POST', '/devices', { name, rtsp_url: rtspUrl, active_flags: activeFlags, noise_enabled: noiseEnabled });
 }
 
 export async function removeDevice(name: string): Promise<void> {
@@ -32,6 +32,10 @@ export async function setActiveDevice(name: string): Promise<void> {
 /** Recreates the camera's vision container, so this can take several seconds. */
 export async function setActiveFlags(name: string, activeFlags: boolean[]): Promise<void> {
   await send('PUT', `${devicePath(name)}/active-flags`, { active_flags: activeFlags });
+}
+
+export async function setNoiseEnabled(name: string, enabled: boolean): Promise<void> {
+  await send('PUT', `${devicePath(name)}/noise`, { enabled });
 }
 
 /** Clear the camera's flags and dismiss its alert on every dashboard. */

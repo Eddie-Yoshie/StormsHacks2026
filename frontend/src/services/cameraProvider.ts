@@ -20,6 +20,7 @@ interface StateResponse {
     device_list: Record<string, boolean[]>;
   };
   active_flags: Record<string, boolean[]>;
+  noise_enabled: Record<string, boolean>;
 }
 
 export class BackendCameraProvider implements CameraProvider {
@@ -40,6 +41,7 @@ export class BackendCameraProvider implements CameraProvider {
       name: id,
       flags,
       activeFlags: data.active_flags[id] ?? [...DEFAULT_ACTIVE_FLAGS],
+      noiseEnabled: data.noise_enabled[id] ?? true,
     }));
     return { cameras, activeDevice: data.state.active_device };
   }

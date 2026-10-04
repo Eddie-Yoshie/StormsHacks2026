@@ -83,6 +83,7 @@ const emptyForm = () => ({
   rtspURL: '',
   name: '',
   activeFlags: [...DEFAULT_ACTIVE_FLAGS],
+  noiseEnabled: true,
 })
 
 const formValue = ref(emptyForm())
@@ -111,7 +112,7 @@ const handleSubmit = async (e: MouseEvent) => {
   submitting.value = true;
   try {
     const name = formValue.value.name.trim();
-    await addDevice(name, formValue.value.rtspURL.trim(), formValue.value.activeFlags);
+    await addDevice(name, formValue.value.rtspURL.trim(), formValue.value.activeFlags, formValue.value.noiseEnabled);
     await store.fetchCameras();
     store.selectCamera(name);
     formValue.value = emptyForm();
@@ -218,6 +219,7 @@ const handleSubmit = async (e: MouseEvent) => {
                   <n-space>
                     <n-checkbox v-for="(label, i) in DETECTOR_LABELS" :key="label"
                       v-model:checked="formValue.activeFlags[i]">{{ label }}</n-checkbox>
+                    <n-checkbox v-model:checked="formValue.noiseEnabled">Loud noise</n-checkbox>
                   </n-space>
                 </n-form-item>
               </n-form>

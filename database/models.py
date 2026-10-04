@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, field_validator
-from sqlalchemy import DateTime, String, JSON
+from sqlalchemy import Boolean, DateTime, String, JSON, true
 from sqlalchemy.orm import Mapped, mapped_column
 from vision.flags import DEFAULT_ACTIVE_FLAGS
 from .database import base
@@ -13,6 +13,8 @@ class Device(base):
     flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=list)
     # which vision events the camera's watchdog runs: [fall, dead, bathroom]
     active_flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=lambda: list(DEFAULT_ACTIVE_FLAGS))
+    # whether the backend watches the camera's audio for loud noise
+    noise_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
 
 class Event(base):
     __tablename__ = "events"

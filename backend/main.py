@@ -23,9 +23,10 @@ async def lifespan(app: FastAPI):
         devices = {d.name: list(d.active_flags or DEFAULT_ACTIVE_FLAGS) for d in rows}
         # Containers outlive the backend, so events can arrive before the dashboard calls /devices/state.
         device_state["device_list"] = {d.name: list(d.flags) for d in rows}
+        noisy = [d.name for d in rows if d.noise_enabled]
     await asyncio.to_thread(containers.reconcile, devices)  # docker calls block
     alerts.bind_loop(asyncio.get_running_loop())  # noise watcher threads publish events through it
-    start_noise_watchers(device_state["device_list"])
+    start_noise_watchers(noisy)
     yield
 
 app = FastAPI(lifespan=lifespan)

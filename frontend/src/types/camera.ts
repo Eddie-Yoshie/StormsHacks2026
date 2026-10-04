@@ -8,6 +8,8 @@ export interface Camera {
   flags: boolean[];
   /** Which detectors the camera's vision container runs, indexed by *_ACTIVE. */
   activeFlags: boolean[];
+  /** Whether the backend watches this camera's audio for loud noise. */
+  noiseEnabled: boolean;
 }
 
 // Mirrors vision/flags.py and backend/routes/devices.py.

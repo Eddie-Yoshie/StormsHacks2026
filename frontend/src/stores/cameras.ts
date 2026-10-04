@@ -57,6 +57,13 @@ export const useCamerasStore = defineStore('cameras', () => {
     }
   }
 
+  function setCameraNoiseEnabled(id: string, enabled: boolean): void {
+    const camera = cameras.value.find(cam => cam.id === id);
+    if (camera) {
+      camera.noiseEnabled = enabled;
+    }
+  }
+
   const activeCamera = computed<Camera | null>(() => cameras.value.find(cam => cam.id === activeCameraId.value) ?? null);
 
   return {
@@ -69,6 +76,7 @@ export const useCamerasStore = defineStore('cameras', () => {
     selectCamera,
     removeCamera,
     setCameraActiveFlags,
+    setCameraNoiseEnabled,
     activeCamera,
   };
 });
