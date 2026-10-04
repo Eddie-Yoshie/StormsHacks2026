@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { NButton } from 'naive-ui';
+import { NButton, type FormInst } from 'naive-ui';
 import { useCamerasStore } from './stores/cameras';
 import CameraCard from './components/CameraCard.vue';
 
@@ -36,7 +36,11 @@ const menuOptions = computed(() =>
 );
 
 const showModal = ref(false)
-const formRef = ref(null)
+const formRef = ref<FormInst | null>(null)
+const submitting = ref(false)
+const submitError = ref<string | null>(null)
+
+const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 const formValue = ref({
   rtspURL: '',
@@ -56,8 +60,36 @@ const rules = {
   }
 }
 
-const handleSubmit = (e: MouseEvent) => {
+const handleSubmit = async (e: MouseEvent) => {
   e.preventDefault();
+  submitError.value = null;
+  try {
+    await formRef.value?.validate();
+  } catch {
+    return; // validation errors are shown inline by n-form
+  }
+  submitting.value = true;
+  try {
+    const res = await fetch(`${apiBaseUrl}/devices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: formValue.value.name,
+        rtsp_url: formValue.value.rtspURL,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`Failed to add camera (${res.status}): ${detail}`);
+    }
+    store.addCamera(formValue.value.name);
+    formValue.value = { rtspURL: '', name: '' };
+    showModal.value = false;
+  } catch (err) {
+    submitError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    submitting.value = false;
+  }
 }
 
 // const options = [
@@ -121,7 +153,7 @@ const handleSubmit = (e: MouseEvent) => {
             @update:value="(key: string) => store.selectCamera(key)" />
           <n-button @click="showModal = true">Add Camera</n-button>
           <n-modal v-model:show="showModal">
-            <n-card style="width: 600px" title="Add New User" :bordered="false" size="huge" role="dialog"
+            <n-card style="width: 600px" title="Add Camera" :bordered="false" size="huge" role="dialog"
               aria-modal="true">
               <n-form ref="formRef" :model="formValue" :rules="rules">
                 <n-form-item label="RTSP URL" path="rtspURL">
@@ -132,10 +164,14 @@ const handleSubmit = (e: MouseEvent) => {
                 </n-form-item>
               </n-form>
 
+              <n-alert v-if="submitError" type="error" :bordered="false" style="margin-top: 12px">
+                {{ submitError }}
+              </n-alert>
+
               <template #footer>
                 <n-space justify="end">
                   <n-button @click="showModal = false">Cancel</n-button>
-                  <n-button type="primary" @click="handleSubmit">Submit</n-button>
+                  <n-button type="primary" :loading="submitting" @click="handleSubmit">Submit</n-button>
                 </n-space>
               </template>
             </n-card>
