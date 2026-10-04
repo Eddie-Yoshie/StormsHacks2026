@@ -31,7 +31,7 @@ python3 main.py
 ```
 
 To run mediatx for converting RTSP into HTML-friendly data:
-```
+```bash
 docker compose up -d
 ```
 
