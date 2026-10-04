@@ -11,6 +11,15 @@ webrtcAdditionalHosts: ["127.0.0.1", "172.16.184.203"]
 api: yes
 apiAddress: :9997
 
+authInternalUsers:
+  - user: any
+    pass: ""
+    ips: []
+    permissions:
+      - action: api
+      - action: publish
+      - action: read
+
 paths:
   # Any RTSP publisher may push to /<name>; camera paths are also configured
   # here (or later via the backend through the MediaMTX API).

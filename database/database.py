@@ -1,8 +1,10 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, declarative_base
 
-SERVER_URL = "mysql+pymysql://root@127.0.0.1:4000";
+SERVER_URL = os.environ.get("DATABASE_URL", "mysql+pymysql://root@127.0.0.1:4000");
 server_engine = create_engine(SERVER_URL, echo=True)
 with server_engine.begin() as conn:
     conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS ok")

@@ -1,3 +1,4 @@
+import os
 from typing import Any
 import cv2
 
@@ -5,10 +6,12 @@ from cv2.typing import MatLike
 import requests
 
 # not entirely sure if we need all of these, but keeping in case
-base_url = "http://localhost:9997/v3/config/paths"
-status_url = "http://localhost:9997/v3/paths"
-base_webrtc_url = "http://localhost:8889"
-internal_access_url = "rtsp://localhost:8554"
+_mediamtx_api_base = os.environ.get("MEDIAMTX_API_BASE", "http://localhost:9997")
+base_url = f"{_mediamtx_api_base}/v3/config/paths"
+status_url = f"{_mediamtx_api_base}/v3/paths"
+# NB: consumed by the browser, so this must stay reachable from the host
+base_webrtc_url = os.environ.get("MEDIAMTX_WEBRTC_BASE", "http://localhost:8889")
+internal_access_url = os.environ.get("MEDIAMTX_RTSP_INTERNAL", "rtsp://localhost:8554")
 
 
 def add_stream(name: str, rtsp_url: str) -> dict[str, Any]:

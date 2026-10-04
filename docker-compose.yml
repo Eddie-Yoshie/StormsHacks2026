@@ -6,3 +6,75 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     restart: unless-stopped
+  db:
+    image: mysql:8
+    ports:
+      - "4000:3306"
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: ok
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  backend:
+    build:
+      # require root context as backend imports the backend, database and vision packages
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ok-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # use internal port
+      DATABASE_URL: mysql+pymysql://root@db:3306
+      # MediaMTX runs with host networking, so reach it via the Docker host
+      MEDIAMTX_API_BASE: http://host.docker.internal:9997
+      MEDIAMTX_RTSP_INTERNAL: rtsp://host.docker.internal:8554
+      # image that containers.py starts, one watchdog container per camera
+      OK_VISION_IMAGE: ok-vision
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app/backend
+      - ./database:/app/database
+      - ./vision:/app/vision
+      # let containers.py control sibling vision containers on the host daemon
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  # Built but never run directly: containers.py starts one ok-vision container per camera on demand.
+  vision:
+    image: ok-vision
+    build:
+      # root context: vision/Dockerfile copies the vision/ package from the repo root
+      context: .
+      dockerfile: vision/Dockerfile
+    deploy:
+      replicas: 0
+  frontend:
+    build:
+      context: frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    develop:
+      watch:
+        - path: ./frontend/src
+          target: /app/src
+          action: sync
+        - path: ./frontend/package.json
+          action: rebuild
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
