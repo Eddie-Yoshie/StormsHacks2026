@@ -4,6 +4,7 @@ mediamtx/*
 # For debugging with AI
 .playwright/
 .direnv/
+.venv/
 mediamtx/*
 __pycache__/
 backend/__pycache__/
