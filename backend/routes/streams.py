@@ -24,7 +24,7 @@ def get_webrtc_url(name: str) -> str:
 
 
 def delete_stream(name: str) -> None:
-    response = requests.delete(f"{base_url}/remove/{name}", timeout=5)
+    response = requests.delete(f"{base_url}/delete/{name}", timeout=5)
     response.raise_for_status()
 
 
