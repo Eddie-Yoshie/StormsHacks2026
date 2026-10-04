@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue';
+import { computed, h, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { NButton, type FormInst } from 'naive-ui';
 import { useCamerasStore } from './stores/cameras';
+import { useEventsStore } from './stores/events';
 import AlertNotifier from './components/AlertNotifier.vue';
 import CameraCard from './components/CameraCard.vue';
 
 const store = useCamerasStore();
 const { cameras, loading, error, activeCamera } = storeToRefs(store);
 
+const eventsStore = useEventsStore();
+const { events, loading: eventsLoading, error: eventsError } = storeToRefs(eventsStore);
+
+const formatTimestamp = (timestamp: string): string =>
+  new Date(timestamp).toLocaleString();
+
 onMounted(() => {
   void store.fetchCameras();
+  eventsStore.startPolling(1000);
+});
+
+onUnmounted(() => {
+  eventsStore.stopPolling();
 });
 
 const menuOptions = computed(() =>
@@ -137,6 +149,31 @@ const handleSubmit = async (e: MouseEvent) => {
   justify-content: space-between;
   width: 100%;
 }
+
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event-row {
+  padding: 8px 10px;
+  border: 1px solid rgb(239, 239, 245);
+  border-radius: 6px;
+}
+
+.event-row__time {
+  font-size: 12px;
+  color: rgb(118, 124, 130);
+}
+
+.event-row__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
 </style>
 
 <template>
@@ -152,27 +189,7 @@ const handleSubmit = async (e: MouseEvent) => {
         <n-layout-sider :native-scrollbar="false" bordered>
           <n-menu :value="activeCamera?.id" :options="menuOptions"
             @update:value="(key: string) => store.selectCamera(key)" />
-        </n-layout-sider>
-        <n-layout-content style="padding: 24px">
-          <n-spin :show="loading">
-            <n-alert v-if="error" type="error" title="Failed to load cameras" :bordered="false">
-              {{ error }}
-            </n-alert>
-
-            <div v-else>
-              <CameraCard v-if="activeCamera" :key="activeCamera.id" :camera="activeCamera" style="max-width: 90%" />
-              <n-empty v-else description="No cameras configured" />
-            </div>
-
-            <!-- <n-dropdown :options="options" @select="handleSelect">
-              <n-button>My Menu</n-button>
-            </n-dropdown> -->
-          </n-spin>
-        </n-layout-content>
-        <n-layout-sider style="border-left: 1px solid rgb(239, 239, 245);" :native-scrollbar="false">
-          <n-menu :value="activeCamera" :options="menuOptions"
-            @update:value="(key: string) => store.selectCamera(key)" />
-          <n-button @click="showModal = true">Add Camera</n-button>
+          <n-button @click="showModal = true" style="margin-left: 24px;">Add Camera</n-button>
           <n-modal v-model:show="showModal">
             <n-card style="width: 600px" title="Add Camera" :bordered="false" size="huge" role="dialog"
               aria-modal="true">
@@ -197,6 +214,40 @@ const handleSubmit = async (e: MouseEvent) => {
               </template>
             </n-card>
           </n-modal>
+        </n-layout-sider>
+        <n-layout-content style="padding: 24px">
+          <n-spin :show="loading">
+            <n-alert v-if="error" type="error" title="Failed to load cameras" :bordered="false">
+              {{ error }}
+            </n-alert>
+
+            <div v-else>
+              <CameraCard v-if="activeCamera" :key="activeCamera.id" :camera="activeCamera" style="max-width: 90%" />
+              <n-empty v-else description="No cameras configured" />
+            </div>
+
+            <!-- <n-dropdown :options="options" @select="handleSelect">
+              <n-button>My Menu</n-button>
+            </n-dropdown> -->
+          </n-spin>
+        </n-layout-content>
+        <n-layout-sider style="border-left: 1px solid rgb(239, 239, 245);" :native-scrollbar="false" content-style="padding: 16px;">
+          <n-h4 style="margin: 0 0 12px">Events</n-h4>
+          <n-spin :show="eventsLoading">
+            <n-alert v-if="eventsError" type="error" :bordered="false">
+              {{ eventsError }}
+            </n-alert>
+            <n-empty v-else-if="events.length === 0" description="No events" />
+            <div v-else class="event-list">
+              <div v-for="event in events" :key="event.id" class="event-row">
+                <div class="event-row__time">{{ formatTimestamp(event.timestamp) }}</div>
+                <div class="event-row__meta">
+                  <span>{{ event.cameraId }}</span>
+                  <n-tag size="small" type="warning">{{ event.eventType }}</n-tag>
+                </div>
+              </div>
+            </div>
+          </n-spin>
         </n-layout-sider>
       </n-layout>
     </n-layout>
