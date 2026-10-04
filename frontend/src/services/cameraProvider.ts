@@ -9,30 +9,32 @@ export interface CameraProvider {
   listCameras(): Promise<Camera[]>;
 }
 
-export class StaticCameraProvider implements CameraProvider {
-  private readonly cameras: Camera[];
 
-  constructor(cameras: Camera[]) {
-    this.cameras = cameras;
-  }
-
-  listCameras(): Promise<Camera[]> {
-    return Promise.resolve(this.cameras);
-  }
+interface StateResponse {
+  state: {
+    active_device: string;
+    device_list: Record<string, unknown>;
+  };
 }
 
-function defaultCameras(): Camera[] {
-  const ids = (import.meta.env.VITE_CAMERA_IDS as string | undefined)
-    ?.split(',')
-    .map((id) => id.trim())
-    .filter(Boolean);
-  if (ids && ids.length > 0) {
-    return ids.map((id) => ({ id, name: id }));
+export class BackendCameraProvider implements CameraProvider {
+  private readonly baseUrl: string;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
   }
-  return [{ id: 'demo', name: 'Demo Camera', description: 'Default MediaMTX path' }];
+
+  async listCameras(): Promise<Camera[]> {
+    const res = await fetch(`${this.baseUrl}/devices/state`);
+    if (!res.ok) {
+      throw new Error(`Failed to load cameras (${res.status})`);
+    }
+    const data = (await res.json()) as StateResponse;
+    return Object.keys(data.state.device_list).map((id) => ({ id, name: id }));
+  }
 }
 
 export function createCameraProvider(): CameraProvider {
-  // Later: return new BackendCameraProvider(import.meta.env.VITE_API_BASE_URL);
-  return new StaticCameraProvider(defaultCameras());
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+  return new BackendCameraProvider(baseUrl);
 }
