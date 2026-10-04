@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Integer, String, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import base
@@ -20,3 +21,11 @@ class Event(base):
         DateTime, default=datetime.now(timezone.utc), nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+
+class EventResponse(BaseModel):
+  id: int
+  camera_id: int
+  timestamp: datetime
+  event_type: str
+
+  model_config = ConfigDict(from_attributes=True)
