@@ -21,9 +21,9 @@ class FallConfig:
     """Thresholds for the fall rule. Distances are in body units (shoulder-mid to hip-mid length)."""
 
     # Hip-mid downward velocity (body units/s) that starts a fall candidate.
-    drop_velocity: float = 1.5
+    drop_velocity: float = 1.0
     # Smoothing time constant for hip velocity, in seconds.
-    velocity_tau_s: float = 0.15
+    velocity_tau_s: float = 0.1
     # Window in which the drop and an orientation signal must both happen.
     window_s: float = 1.5
     # Torso angle from vertical (degrees): below = upright, above = horizontal.
@@ -37,11 +37,11 @@ class FallConfig:
     # which separates lying from bending over.
     lying_max_leg_drop: float = 0.7
     # How long the person must stay lying to confirm a fall.
-    confirm_lying_s: float = 2.0
+    confirm_lying_s: float = 1.0
     # Give up on a candidate that hasn't been confirmed after this long.
     confirm_timeout_s: float = 6.0
     # Pose lost within this long after the drop starts -> possible occluded fall.
-    lost_after_drop_s: float = 0.5
+    lost_after_drop_s: float = 0.3
     # ...and must stay lost this long to emit a low-confidence fall.
     lost_confirm_s: float = 2.0
     # Re-arm after an event once upright this long, or after cooldown_max_s regardless.
@@ -58,7 +58,7 @@ class BathroomConfig:
     """Bathroom timeout: alert when someone stays in view of a bathroom camera too long."""
 
     # Continuous presence that triggers an alert (e.g. can't get up from the toilet).
-    timeout_s: float = 15 * 60
+    timeout_s: float = 0.5 * 60
     # Pose dropouts shorter than this don't count as leaving (occlusion by a door or curtain, a
     # missed detection). Gone this long means the room is empty and the timer resets.
     absent_reset_s: float = 15.0
