@@ -62,3 +62,19 @@ class BathroomConfig:
     # Pose dropouts shorter than this don't count as leaving (occlusion by a door or curtain, a
     # missed detection). Gone this long means the room is empty and the timer resets.
     absent_reset_s: float = 15.0
+
+
+@dataclass(frozen=True)
+class DeadConfig:
+    """Stillness check: alert when a detected person's pose stops moving for a prolonged time."""
+
+    # Features.motion (body units/s) below this counts as still. Must sit above landmark jitter on a
+    # motionless person; this default is a placeholder to tune against real footage.
+    motion_threshold: float = 0.3
+    # Continuous stillness that triggers an alert.
+    still_s: float = 120.0
+    # Frames without a usable motion reading (pose lost, torso occluded) shorter than this are
+    # ignored; longer than this and the stillness timer resets, since we can't tell it's the same person.
+    unknown_reset_s: float = 5.0
+    # Re-arm after an event once the person has moved (motion above threshold) this long.
+    rearm_motion_s: float = 3.0

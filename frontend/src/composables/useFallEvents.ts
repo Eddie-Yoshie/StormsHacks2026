@@ -6,7 +6,7 @@ export interface FallEvent {
   /** Unix seconds when the vision worker detected the fall. */
   ts: number;
   confidence: 'high' | 'low';
-  kind: 'fall' | 'bathroom_timeout';
+  kind: 'fall' | 'bathroom_timeout' | 'dead_check';
   details: Record<string, unknown>;
 }
 
@@ -18,6 +18,11 @@ export function describeAlert(event: FallEvent): { tag: string; title: string; d
     const seconds = Number(event.details.present_s ?? 0);
     const duration = seconds < 90 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
     return { tag: 'BATHROOM', title: 'Bathroom timeout', detail: `In the bathroom for ${duration}, may need help getting up` };
+  }
+  if (event.kind === 'dead_check') {
+    const seconds = Number(event.details.still_s ?? 0);
+    const duration = seconds < 90 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
+    return { tag: 'NO MOVEMENT', title: 'No movement detected', detail: `Has not moved for ${duration}, may be unresponsive` };
   }
   return {
     tag: 'FALL',
