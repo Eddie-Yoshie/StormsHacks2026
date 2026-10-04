@@ -1,0 +1,13 @@
+# Override for Docker Desktop (Windows/macOS). Its host networking doesn't carry WebRTC media to the
+# browser, so MediaMTX runs on the default bridge with its ports published instead. Everything else still
+# reaches it on localhost / host.docker.internal.
+#   docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
+services:
+  mediamtx:
+    network_mode: bridge
+    ports:
+      - "8554:8554"       # RTSP (backend noise watcher, vision containers)
+      - "8889:8889"       # WebRTC/WHEP signalling
+      - "8189:8189/udp"   # WebRTC media
+      - "8189:8189/tcp"   # WebRTC media, TCP fallback
+      - "9997:9997"       # API (backend registers camera paths)
