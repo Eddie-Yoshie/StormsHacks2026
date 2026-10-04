@@ -1,20 +1,14 @@
 from typing import Annotated, Any
-import sys
 import threading
-from pathlib import Path
-
 import requests
+
 from fastapi import APIRouter, Body, HTTPException
 
-# backend/ is the working dir when running main.py, so add the repo root to
-# import the sibling `database` package
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from database.database import SessionLocal
+from backend.dependencies.database import SessionDependency
 from database.models import Device
 
-from routes import streams
-from routes.audio import watch_loud_noise
+from backend.routes import streams
+from backend.routes.audio import watch_loud_noise
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -28,7 +22,6 @@ state: dict[str, Any] = {
 NOISE_FLAG = 0
 
 _noise_watchers: dict[str, threading.Event] = {}
-
  
 def read_state() -> dict[str, Any]:
     return state
@@ -39,7 +32,6 @@ def _on_loud(name: str, level_db: float) -> None:
     if flags is not None:  # device may have been removed while the watcher winds down
         flags[NOISE_FLAG] = True
 
-
 def _start_noise_watcher(name: str) -> None:
     stop = threading.Event()
     _noise_watchers[name] = stop
@@ -49,19 +41,16 @@ def _start_noise_watcher(name: str) -> None:
         daemon=True,
     ).start()
 
-
 def _stop_noise_watcher(name: str) -> None:
     stop = _noise_watchers.pop(name, None)
     if stop is not None:
         stop.set()
 
-
 # endpoints
 @router.get("/state")
-def get_state() -> dict[str, Any]:
+def get_state(db: SessionDependency) -> dict[str, Any]:
     """Accessor for the global app state, returns pertinent information."""
-    with SessionLocal() as db:
-        devices = db.query(Device).all()
+    devices = db.query(Device).all()        
     device_list = {device.name: list(device.flags) for device in devices}
     # keep any live in-memory flags (e.g. noise) for devices still in the db
     for name, flags in state["device_list"].items():
@@ -69,7 +58,6 @@ def get_state() -> dict[str, Any]:
             device_list[name] = flags
     state["device_list"] = device_list
     return {"state": read_state()}
-
 
 @router.put("/active")
 def set_active_device(name: Annotated[str, Body(embed=True)]) -> dict[str, str]:
@@ -79,7 +67,6 @@ def set_active_device(name: Annotated[str, Body(embed=True)]) -> dict[str, str]:
     state["active_device"] = name
     return {"active_device": name}
 
-
 @router.get("/active/webrtc")
 def get_active_webrtc_url() -> dict[str, str]:
     """Return the WebRTC URL of the stream for the active device."""
@@ -88,26 +75,23 @@ def get_active_webrtc_url() -> dict[str, str]:
         raise HTTPException(status_code=404, detail="No active device")
     return {"name": name, "webrtc_url": streams.get_webrtc_url(name)}
 
-
 # add and remove devices
 @router.post("", status_code=201)
 def add_device(
-    name: Annotated[str, Body()], rtsp_url: Annotated[str, Body()]
+    name: Annotated[str, Body()], rtsp_url: Annotated[str, Body()], db: SessionDependency
 ) -> dict[str, Any]:
     """Register the stream with MediaMTX, then record the device in the app state and database."""
     if name in state["device_list"]:
         raise HTTPException(status_code=409, detail=f"Device {name!r} already exists")
-    with SessionLocal() as db:
-        if db.get(Device, name) is not None:
-            raise HTTPException(status_code=409, detail=f"Device {name!r} already exists")
+    if db.get(Device, name) is not None:
+        raise HTTPException(status_code=409, detail=f"Device {name!r} already exists")
     try:
         result = streams.add_stream(name, rtsp_url)
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
 
-    with SessionLocal() as db:
-        db.add(Device(name=name, flags=[False]))
-        db.commit()
+    db.add(Device(name=name, flags=[False]))
+    db.commit()
 
     state["device_list"][name] = [False]
     if not state["active_device"]:
@@ -115,9 +99,8 @@ def add_device(
     _start_noise_watcher(name)
     return result
 
-
 @router.delete("/{name}", status_code=204)
-def remove_device(name: str) -> None:
+def remove_device(name: str, db: SessionDependency) -> None:
     """Remove the stream from MediaMTX, then drop the device from the app state."""
     if name not in state["device_list"]:
         raise HTTPException(status_code=404, detail=f"No device named {name!r}")
@@ -128,11 +111,10 @@ def remove_device(name: str) -> None:
         _start_noise_watcher(name)
         raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
 
-    with SessionLocal() as db:
-        device = db.get(Device, name)
-        if device is not None:
-            db.delete(device)
-            db.commit()
+    device = db.get(Device, name)
+    if device is not None:
+        db.delete(device)
+        db.commit()
 
     del state["device_list"][name]
     if state["active_device"] == name:
