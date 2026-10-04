@@ -26,8 +26,7 @@ npm run dev
 
 To run the backend, we can start the backend using:
 ```bash
-cd backend
-python3 main.py
+python3 -m backend.main
 ```
 
 To run mediatx for converting RTSP into HTML-friendly data:
