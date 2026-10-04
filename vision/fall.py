@@ -18,10 +18,17 @@ class FallEvent:
     camera_id: str
     ts: float  # unix seconds
     confidence: str  # "high" | "low"
+    kind: str = "fall"  # "fall" | "bathroom_timeout"
     details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"camera_id": self.camera_id, "ts": self.ts, "confidence": self.confidence, "details": self.details}
+        return {
+            "camera_id": self.camera_id,
+            "ts": self.ts,
+            "confidence": self.confidence,
+            "kind": self.kind,
+            "details": self.details,
+        }
 
 
 class FallDetector:

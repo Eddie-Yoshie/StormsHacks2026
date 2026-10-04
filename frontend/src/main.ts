@@ -23,6 +23,7 @@ import {
   NForm,
   NInput,
   NFormItem,
+  NNotificationProvider,
 } from 'naive-ui';
 import App from './App.vue';
 
@@ -49,6 +50,7 @@ const naive = create({
     NForm,
     NInput,
     NFormItem,
+    NNotificationProvider,
   ],
 });
 
