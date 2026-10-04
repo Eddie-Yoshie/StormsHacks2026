@@ -2,15 +2,19 @@ from collections.abc import Iterable
 from typing import Annotated, Any
 import logging
 import threading
+import time
 import requests
 
 from fastapi import APIRouter, Body, HTTPException
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from backend.dependencies.database import SessionDependency
+from database.database import engine
 from database.models import Device
 from vision.flags import DEFAULT_ACTIVE_FLAGS
 
-from backend.routes import containers, streams
+from backend.routes import alerts, containers, streams
 from backend.routes.audio import watch_loud_noise
 
 log = logging.getLogger(__name__)
@@ -45,8 +49,27 @@ def clear_flags(name: str) -> None:
         state["device_list"][name] = [False] * FLAG_COUNT
 
 # watchers
+# The watcher reports every 0.25 s while it stays loud; record at most one event per camera per window.
+NOISE_EVENT_COOLDOWN_S = 30.0
+_last_noise_event: dict[str, float] = {}
+
 def _on_loud(name: str, level_db: float) -> None:
+    """Runs on the camera's noise watcher thread."""
+    if name not in state["device_list"]:  # removed while its watcher winds down
+        return
     raise_flag(name, NOISE_FLAG)
+    now = time.time()
+    if now - _last_noise_event.get(name, 0.0) < NOISE_EVENT_COOLDOWN_S:
+        return
+    _last_noise_event[name] = now
+    try:
+        with Session(bind=engine) as db:
+            event_id = alerts.store_event(db, name, now, alerts.LOUD_NOISE)
+    except SQLAlchemyError as e:
+        log.warning("Could not store loud-noise event for %s: %s", name, e)
+        return
+    details = {"level_db": round(level_db, 1)}
+    alerts.publish_threadsafe(alerts.make_stored(event_id, name, now, alerts.LOUD_NOISE, "high", details))
 
 def _start_noise_watcher(name: str) -> None:
     stop = threading.Event()

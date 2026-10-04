@@ -86,15 +86,15 @@ function fullscreen(): void {
 </script>
 
 <template>
-  <n-card :title="camera.name" size="small" :class="{ falling: fall }">
+  <n-card :title="camera.name" size="small" :class="{ falling: alertText?.type === 'error' }">
     <template #header-extra>
       <n-space size="small">
-        <n-tag v-if="alertText" type="error" size="small">{{ alertText.tag }}</n-tag>
+        <n-tag v-if="alertText" :type="alertText.type" size="small">{{ alertText.tag }}</n-tag>
         <n-tag :type="statusMeta.type" size="small" :bordered="false">{{ statusMeta.label }}</n-tag>
       </n-space>
     </template>
 
-    <n-alert v-if="fall && alertText" type="error" :title="alertText.title" class="fall-alert">
+    <n-alert v-if="fall && alertText" :type="alertText.type" :title="alertText.title" class="fall-alert">
       <!-- n-alert has no action slot, so the button lives in the body. -->
       <div class="alert-row">
         <span>{{ fallTime }} · {{ alertText.detail }}</span>

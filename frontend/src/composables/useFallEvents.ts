@@ -7,14 +7,18 @@ export interface FallEvent {
   /** Unix seconds when the vision worker detected the fall. */
   ts: number;
   confidence: 'high' | 'low';
-  kind: 'fall' | 'bathroom_timeout' | 'dead_check';
+  /** loud_noise comes from the backend's audio watcher rather than the vision worker. */
+  kind: 'fall' | 'bathroom_timeout' | 'dead_check' | 'loud_noise';
   details: Record<string, unknown>;
 }
 
-const KIND_LABELS: Record<string, { tag: string; type: 'error' | 'warning' | 'info' }> = {
+export type AlertSeverity = 'error' | 'warning';
+
+const KIND_LABELS: Record<string, { tag: string; type: AlertSeverity | 'info' }> = {
   fall: { tag: 'FALL', type: 'error' },
   dead_check: { tag: 'NO MOVEMENT', type: 'error' },
   bathroom_timeout: { tag: 'BATHROOM', type: 'warning' },
+  loud_noise: { tag: 'LOUD NOISE', type: 'warning' },
 };
 
 /** Short tag and color for an event kind, for lists such as the event history. */
@@ -23,21 +27,27 @@ export function kindLabel(kind: string): { tag: string; type: 'error' | 'warning
 }
 
 /** Headline text for an alert, shared by the camera card and the front-desk notification. */
-export function describeAlert(event: FallEvent): { tag: string; title: string; detail: string } {
+export function describeAlert(event: FallEvent): { tag: string; title: string; detail: string; type: AlertSeverity } {
   if (event.kind === 'bathroom_timeout') {
     const seconds = Number(event.details.present_s ?? 0);
     const duration = seconds < 90 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
-    return { tag: 'BATHROOM', title: 'Bathroom timeout', detail: `In the bathroom for ${duration}, may need help getting up` };
+    return { tag: 'BATHROOM', title: 'Bathroom timeout', detail: `In the bathroom for ${duration}, may need help getting up`, type: 'error' };
   }
   if (event.kind === 'dead_check') {
     const seconds = Number(event.details.still_s ?? 0);
     const duration = seconds < 90 ? `${Math.round(seconds)} s` : `${Math.round(seconds / 60)} min`;
-    return { tag: 'NO MOVEMENT', title: 'No movement detected', detail: `Has not moved for ${duration}, may be unresponsive` };
+    return { tag: 'NO MOVEMENT', title: 'No movement detected', detail: `Has not moved for ${duration}, may be unresponsive`, type: 'error' };
+  }
+  if (event.kind === 'loud_noise') {
+    const level = Number(event.details.level_db ?? NaN);
+    const detail = Number.isFinite(level) ? `Sound reached ${Math.round(level)} dBFS near the camera` : 'Loud sound near the camera';
+    return { tag: 'LOUD NOISE', title: 'Loud noise', detail, type: 'warning' };
   }
   return {
     tag: 'FALL',
     title: 'Fall detected',
     detail: event.confidence === 'high' ? 'High confidence' : 'Low confidence (person left view)',
+    type: 'error',
   };
 }
 
