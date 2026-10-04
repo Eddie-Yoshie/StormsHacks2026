@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from database.database import create_db_and_tables, engine
 from database.models import Device
 from vision.flags import DEFAULT_ACTIVE_FLAGS
-from backend.routes import containers
+from backend.routes import alerts, containers
 from backend.routes.devices import router as devices_router, start_noise_watchers, state as device_state
 from backend.routes.vision import router as vision_router
 from backend.routes.events import router as events_router
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
         # Containers outlive the backend, so events can arrive before the dashboard calls /devices/state.
         device_state["device_list"] = {d.name: list(d.flags) for d in rows}
     await asyncio.to_thread(containers.reconcile, devices)  # docker calls block
+    alerts.bind_loop(asyncio.get_running_loop())  # noise watcher threads publish events through it
     start_noise_watchers(device_state["device_list"])
     yield
 

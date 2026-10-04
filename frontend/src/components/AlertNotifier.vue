@@ -23,7 +23,8 @@ function show(event: FallEvent): void {
   close(event.camera_id); // newer alert for the same camera replaces the old one
   const camera = store.cameras.find((cam) => cam.id === event.camera_id);
   const text = describeAlert(event);
-  const n = notification.error({
+  const n = notification.create({
+    type: text.type,
     title: `${text.title}: ${camera?.name ?? event.camera_id}`,
     content: text.detail,
     meta: new Date(event.ts * 1000).toLocaleTimeString(),
