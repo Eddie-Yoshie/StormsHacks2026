@@ -1,4 +1,5 @@
 from typing import Annotated, Any
+import logging
 import threading
 import requests
 
@@ -6,9 +7,12 @@ from fastapi import APIRouter, Body, HTTPException
 
 from backend.dependencies.database import SessionDependency
 from database.models import Device
+from vision.flags import DEFAULT_ACTIVE_FLAGS
 
-from backend.routes import streams
+from backend.routes import containers, streams
 from backend.routes.audio import watch_loud_noise
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -18,19 +22,26 @@ state: dict[str, Any] = {
     "device_list": {},  # dict[str, list[bool]]
 }
 
-# indexes into a device's flag list + watcher event list
+# indexes into a device's flag list: noise first, then one flag per vision event in active-flag order
 NOISE_FLAG = 0
+FIRST_VISION_FLAG = 1
+FLAG_COUNT = FIRST_VISION_FLAG + len(DEFAULT_ACTIVE_FLAGS)
 
 _noise_watchers: dict[str, threading.Event] = {}
  
 def read_state() -> dict[str, Any]:
     return state
 
+def raise_flag(name: str, index: int) -> None:
+    flags = state["device_list"].get(name)
+    if flags is None:  # device may have been removed while its watcher or container winds down
+        return
+    flags.extend([False] * (index + 1 - len(flags)))  # rows saved before more flags existed are shorter
+    flags[index] = True
+
 # watchers
 def _on_loud(name: str, level_db: float) -> None:
-    flags = read_state()["device_list"].get(name)
-    if flags is not None:  # device may have been removed while the watcher winds down
-        flags[NOISE_FLAG] = True
+    raise_flag(name, NOISE_FLAG)
 
 def _start_noise_watcher(name: str) -> None:
     stop = threading.Event()
@@ -45,6 +56,14 @@ def _stop_noise_watcher(name: str) -> None:
     stop = _noise_watchers.pop(name, None)
     if stop is not None:
         stop.set()
+
+def _checked_active_flags(active_flags: list[bool] | None) -> list[bool]:
+    flags = list(DEFAULT_ACTIVE_FLAGS) if active_flags is None else list(active_flags)
+    if len(flags) != len(DEFAULT_ACTIVE_FLAGS):
+        raise HTTPException(
+            status_code=422, detail=f"active_flags needs {len(DEFAULT_ACTIVE_FLAGS)} entries [fall, dead, bathroom]"
+        )
+    return flags
 
 # endpoints
 @router.get("/state")
@@ -78,9 +97,17 @@ def get_active_webrtc_url() -> dict[str, str]:
 # add and remove devices
 @router.post("", status_code=201)
 def add_device(
-    name: Annotated[str, Body()], rtsp_url: Annotated[str, Body()], db: SessionDependency
+    name: Annotated[str, Body()],
+    rtsp_url: Annotated[str, Body()],
+    db: SessionDependency,
+    active_flags: Annotated[list[bool] | None, Body()] = None,
 ) -> dict[str, Any]:
-    """Register the stream with MediaMTX, then record the device in the app state and database."""
+    """Register the stream with MediaMTX, start its vision container, then record the device in the app state and database."""
+    try:
+        containers.validate_name(name)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    flags = _checked_active_flags(active_flags)
     if name in state["device_list"]:
         raise HTTPException(status_code=409, detail=f"Device {name!r} already exists")
     if db.get(Device, name) is not None:
@@ -90,10 +117,19 @@ def add_device(
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
 
-    db.add(Device(name=name, flags=[False]))
+    try:
+        containers.start_container(name, flags)
+    except containers.ContainerError as e:
+        try:
+            streams.delete_stream(name)
+        except requests.RequestException:
+            log.warning("Could not roll back MediaMTX stream %r after container failure", name)
+        raise HTTPException(status_code=502, detail=f"Vision container failed to start: {e}")
+
+    db.add(Device(name=name, flags=[False] * FLAG_COUNT, active_flags=flags))
     db.commit()
 
-    state["device_list"][name] = [False]
+    state["device_list"][name] = [False] * FLAG_COUNT
     if not state["active_device"]:
         state["active_device"] = name
     _start_noise_watcher(name)
@@ -119,3 +155,26 @@ def remove_device(name: str, db: SessionDependency) -> None:
     del state["device_list"][name]
     if state["active_device"] == name:
         state["active_device"] = next(iter(state["device_list"]), "")
+
+    # The stream is gone, so the container is useless; a failure here is cleaned up by the startup reconcile.
+    try:
+        containers.stop_container(name)
+    except containers.ContainerError as e:
+        log.warning("Could not stop vision container for %r: %s", name, e)
+
+@router.put("/{name}/active-flags")
+def set_active_flags(
+    name: str, active_flags: Annotated[list[bool], Body(embed=True)], db: SessionDependency
+) -> dict[str, Any]:
+    """Change which vision events a camera watches; recreates its container with the new flags."""
+    device = db.get(Device, name)
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"No device named {name!r}")
+    flags = _checked_active_flags(active_flags)
+    try:
+        containers.restart_container(name, flags)
+    except containers.ContainerError as e:
+        raise HTTPException(status_code=502, detail=f"Vision container failed to restart: {e}")
+    device.active_flags = flags
+    db.commit()
+    return {"name": name, "active_flags": flags}

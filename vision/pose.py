@@ -18,7 +18,7 @@ L_SHOULDER, R_SHOULDER = 11, 12
 L_HIP, R_HIP = 23, 24
 L_ANKLE, R_ANKLE = 27, 28
 
-CONNECTIONS = [(c.start, c.end) for c in vision.PoseLandmarksConnections.POSE_LANDMARKS]
+CONNECTIONS: list[tuple[int, int]] = [(c.start, c.end) for c in vision.PoseLandmarksConnections.POSE_LANDMARKS]
 
 
 @dataclass
