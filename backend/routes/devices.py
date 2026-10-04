@@ -1,8 +1,17 @@
 from typing import Annotated, Any
+import sys
 import threading
+from pathlib import Path
 
 import requests
 from fastapi import APIRouter, Body, HTTPException
+
+# backend/ is the working dir when running main.py, so add the repo root to
+# import the sibling `database` package
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from database.database import SessionLocal
+from database.models import Device
 
 from routes import streams
 from routes.audio import watch_loud_noise
@@ -51,6 +60,14 @@ def _stop_noise_watcher(name: str) -> None:
 @router.get("/state")
 def get_state() -> dict[str, Any]:
     """Accessor for the global app state, returns pertinent information."""
+    with SessionLocal() as db:
+        devices = db.query(Device).all()
+    device_list = {device.name: list(device.flags) for device in devices}
+    # keep any live in-memory flags (e.g. noise) for devices still in the db
+    for name, flags in state["device_list"].items():
+        if name in device_list:
+            device_list[name] = flags
+    state["device_list"] = device_list
     return {"state": read_state()}
 
 
@@ -77,13 +94,20 @@ def get_active_webrtc_url() -> dict[str, str]:
 def add_device(
     name: Annotated[str, Body()], rtsp_url: Annotated[str, Body()]
 ) -> dict[str, Any]:
-    """Register the stream with MediaMTX, then record the device in the app state."""
+    """Register the stream with MediaMTX, then record the device in the app state and database."""
     if name in state["device_list"]:
         raise HTTPException(status_code=409, detail=f"Device {name!r} already exists")
+    with SessionLocal() as db:
+        if db.get(Device, name) is not None:
+            raise HTTPException(status_code=409, detail=f"Device {name!r} already exists")
     try:
         result = streams.add_stream(name, rtsp_url)
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
+
+    with SessionLocal() as db:
+        db.add(Device(name=name, flags=[False]))
+        db.commit()
 
     state["device_list"][name] = [False]
     if not state["active_device"]:
@@ -103,6 +127,12 @@ def remove_device(name: str) -> None:
     except requests.RequestException as e:
         _start_noise_watcher(name)
         raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
+
+    with SessionLocal() as db:
+        device = db.get(Device, name)
+        if device is not None:
+            db.delete(device)
+            db.commit()
 
     del state["device_list"][name]
     if state["active_device"] == name:
