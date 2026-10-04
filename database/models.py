@@ -3,7 +3,6 @@ from sqlalchemy import String, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import base
 
-
 class Device(base):
     __tablename__ = "devices"
 
