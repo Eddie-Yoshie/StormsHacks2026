@@ -15,28 +15,20 @@ import cv2
 import numpy as np
 
 from vision.bathroom import BathroomTimer
-from vision.config import BACKEND_URL, PROCESS_WIDTH, BathroomConfig, DeadConfig, FallConfig
+from vision.config import BACKEND_URL, BathroomConfig, DeadConfig
 from vision.dead import DeadDetector
 from vision.emitter import EventEmitter
-from vision.fall import FallDetector
-from vision.features import FeatureExtractor, Features
+from vision.features import Features
 from vision.pose import CONNECTIONS, Pose, PoseEstimator
-from vision.posture import UPRIGHT, PostureTracker
 from vision.source import FrameSource
+from vision.watchdog import build_detectors, resize_frame
 
 log = logging.getLogger("vision")
 
 
-def _resize(frame: np.ndarray) -> np.ndarray:
-    h, w = frame.shape[:2]
-    if w <= PROCESS_WIDTH:
-        return frame
-    return cv2.resize(frame, (PROCESS_WIDTH, int(h * PROCESS_WIDTH / w)), interpolation=cv2.INTER_AREA)
-
-
 def _draw(
     frame: np.ndarray, pose: Pose | None, f: Features | None, posture: str, state: str, fps: float,
-    bathroom: BathroomTimer | None, dead: DeadDetector, ts_ms: int,
+    bathroom: BathroomTimer | None, dead: DeadDetector | None, ts_ms: int,
 ) -> None:
     """Debug overlay for the local --show window. Drawn in memory only; never written to disk."""
     if pose is not None:
@@ -50,8 +42,9 @@ def _draw(
         lines.append(f"angle {f.torso_angle:5.1f}  aspect {f.aspect:.2f}  vy {f.hip_vy:+.2f}  leg {leg}")
     if bathroom is not None:
         lines.append(f"bathroom: present {bathroom.present_s:5.0f}s / {bathroom.cfg.timeout_s:.0f}s")
-    motion = "-" if f is None or f.motion is None else f"{f.motion:.2f}"
-    lines.append(f"dead: still {dead.still_s(ts_ms):5.0f}s / {dead.cfg.still_s:.0f}s  motion {motion}")
+    if dead is not None:
+        motion = "-" if f is None or f.motion is None else f"{f.motion:.2f}"
+        lines.append(f"dead: still {dead.still_s(ts_ms):5.0f}s / {dead.cfg.still_s:.0f}s  motion {motion}")
     for i, text in enumerate(lines):
         cv2.putText(frame, text, (10, 24 + 24 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4)
         cv2.putText(frame, text, (10, 24 + 24 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
@@ -75,16 +68,13 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    cfg = FallConfig()
-    features = FeatureExtractor(cfg)
-    posture = PostureTracker(cfg)
-    detector = FallDetector(args.camera, cfg)
+    bathroom_cfg = None if args.bathroom_timeout is None else BathroomConfig(timeout_s=args.bathroom_timeout * 60)
+    dead_cfg = None if args.dead_timeout is None else DeadConfig(still_s=args.dead_timeout * 60)
+    # Fall and dead check always run here; bathroom only when --bathroom-timeout is given.
+    detectors = build_detectors(
+        args.camera, [True, True, bathroom_cfg is not None], dead_cfg=dead_cfg, bathroom_cfg=bathroom_cfg,
+    )
     emitter = None if args.no_emit else EventEmitter(args.backend)
-    bathroom = None
-    if args.bathroom_timeout is not None:
-        bathroom = BathroomTimer(args.camera, BathroomConfig(timeout_s=args.bathroom_timeout * 60))
-    dead_cfg = DeadConfig() if args.dead_timeout is None else DeadConfig(still_s=args.dead_timeout * 60)
-    dead = DeadDetector(args.camera, dead_cfg)
 
     log.info("Fall detection on camera %r from %s", args.camera, args.source)
     fps = 0.0
@@ -98,17 +88,11 @@ def main() -> None:
                 log.warning("No frames from %s, still waiting...", args.source)
                 continue
             frame, ts_ms = item
-            frame = _resize(frame)
+            frame = resize_frame(frame)
 
             pose = estimator.detect(frame, ts_ms)
-            f = features.update(pose, upright=posture.state == UPRIGHT)
-            posture.update(f, ts_ms)
-            events = [detector.update(f, posture, ts_ms), dead.update(f, ts_ms)]
-            if bathroom is not None:
-                events.append(bathroom.update(pose, ts_ms))
+            f, events = detectors.update(pose, ts_ms)
             for event in events:
-                if event is None:
-                    continue
                 log.warning("%s on %s (%s): %s", event.kind.upper(), event.camera_id, event.confidence, event.details)
                 if emitter is not None:
                     emitter.send(event)
@@ -118,7 +102,8 @@ def main() -> None:
             last = now
 
             if args.show:
-                _draw(frame, pose, f, posture.state, detector.state, fps, bathroom, dead, ts_ms)
+                state = detectors.fall.state if detectors.fall is not None else "off"
+                _draw(frame, pose, f, detectors.posture.state, state, fps, detectors.bathroom, detectors.dead, ts_ms)
                 cv2.imshow(f"OK - {args.camera}", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break

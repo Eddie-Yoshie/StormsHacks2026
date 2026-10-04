@@ -1,14 +1,20 @@
 # vision
 
-Local pose-based event detection. Each frame from a camera stream goes through a pose model, and independent detectors turn the result into events (fall, bathroom timeout, no movement). Everything runs on-device; only numbers (timestamps, confidence, measurements) are sent to the backend, never frames.
+Local pose-based event detection. Each frame from a camera stream goes through a pose model, and independent detectors turn the result into events (fall, no movement, bathroom timeout). Everything runs on-device; only numbers (timestamps, confidence, measurements) are sent to the backend, never frames.
+
+There are two entry points that share the same pipeline through `build_detectors` in `watchdog.py`:
+
+- `watchdog.py` is the headless per-camera worker for production (one per camera). It builds its detectors from default configs and a list of active flags.
+- `run.py` is the debugging CLI (`--show` window, threshold overrides, `--no-emit`).
 
 ## Pipeline
 
 ```mermaid
 flowchart LR
-  source[source.py<br/>FrameSource] --> run[run.py<br/>main loop]
-  run --> pose[pose.py<br/>PoseEstimator]
-  pose --> features[features.py<br/>FeatureExtractor]
+  source[source.py<br/>FrameSource] --> entry[watchdog.py / run.py<br/>frame loop]
+  entry --> pose[pose.py<br/>PoseEstimator]
+  pose --> detectors[watchdog.py<br/>Detectors.update]
+  detectors --> features[features.py<br/>FeatureExtractor]
   features --> posture[posture.py<br/>PostureTracker]
   features --> fall[fall.py<br/>FallDetector]
   posture --> fall
@@ -20,7 +26,7 @@ flowchart LR
   config[config.py] -.thresholds.-> features & posture & fall & dead & bathroom
 ```
 
-Each detector returns a `FallEvent` or `None` per frame. `run.py` logs any event and forwards it to the backend (`POST /vision/events`).
+Each detector returns a `FallEvent` or `None` per frame. The entry point logs any event and forwards it to the backend (`POST /vision/events`).
 
 ## Files
 
@@ -35,7 +41,10 @@ Each detector returns a `FallEvent` or `None` per frame. `run.py` logs any event
 | `bathroom.py` | `BathroomTimer`: alerts when a person stays in view too long. Uses the raw `Pose`. |
 | `dead.py` | `DeadDetector`: alerts when a detected person's pose stops moving. Uses `Features.motion`. |
 | `emitter.py` | `EventEmitter` POSTs events from a background queue thread so the vision loop never blocks. |
-| `run.py` | CLI entry point: wires everything together, runs the frame loop, draws the `--show` overlay. |
+| `run.py` | Debugging CLI: runs the frame loop through `build_detectors`, applies threshold overrides, draws the `--show` overlay. |
+| `watchdog.py` | Production entry point. Defines `Detectors` and `build_detectors` (the one place that lists which events exist), plus the headless `watch_camera` loop. |
+| `flags.py` | Active-flags layout (`FALL_ACTIVE`, `DEAD_ACTIVE`, `BATHROOM_ACTIVE`, `DEFAULT_ACTIVE_FLAGS`). Dependency-free so the backend imports it too. |
+| `Dockerfile` | The general image that runs `watchdog.py`; the backend starts one container per camera from it. |
 
 ## Running
 
@@ -54,6 +63,34 @@ python -m vision.run --camera bedroom1 --dead-timeout 10             # no-moveme
 - `file:` sources use the video's own timestamps, so replays are deterministic and can run faster than real time.
 - On WSL2, `webcam:N` usually can't see the Windows camera. Publish it as RTSP instead (see `tests/README.md`).
 - The pose model downloads to `vision/models/` on first run. MediaPipe also needs `libgles2` and `libegl1` on Ubuntu/WSL.
+
+### Watchdog (production)
+
+```bash
+python -m vision.watchdog --camera demo                          # default flags: fall + dead check
+python -m vision.watchdog --camera bathroom1 --active-flags 1,1,1
+WATCH_ACTIVE_FLAGS=1,1,0 python -m vision.watchdog --camera demo --backend http://localhost:8000
+```
+
+- Active flags are `[fall, dead, bathroom]` (`FALL_ACTIVE`, `DEAD_ACTIVE`, `BATHROOM_ACTIVE` in `vision/flags.py`). The default is `1,1,0`; bathroom is off by default because it alerts on any long stay in view.
+- It uses each event's default config only; there are no threshold flags. Tune with `run.py` and edit `config.py`.
+- It retries opening the stream with backoff, stops cleanly on `SIGTERM`/`SIGINT` (flushing queued events), logs to stdout, and exits non-zero on fatal errors so a container restart policy can act.
+
+### Docker (one container per camera)
+
+Build the image from the repo root. Rebuild it whenever vision code changes:
+
+```bash
+docker build -f vision/Dockerfile -t ok-vision .
+```
+
+The backend does the rest (`backend/routes/containers.py`, called from `backend/routes/devices.py`):
+
+- `POST /devices` (optional body field `active_flags`) starts `vision-<name>` from the image with `--network host`, `--restart unless-stopped` and `WATCH_ACTIVE_FLAGS`. Device names are limited to letters, digits, `_`, `.` and `-`.
+- `PUT /devices/<name>/active-flags` recreates the container with new flags.
+- `DELETE /devices/<name>` stops and removes it.
+- On backend startup, containers are reconciled against the database: missing ones are started, ones with stale flags, a stopped state or an old image are recreated, and orphans are removed.
+- The backend needs access to the Docker CLI (be in the `docker` group).
 
 ## Conventions
 
@@ -77,7 +114,11 @@ python -m vision.run --camera bedroom1 --dead-timeout 10             # no-moveme
    - The `Literal` in `FallEventIn` in `backend/routes/vision.py`.
    - The `kind` type in `frontend/src/composables/useFallEvents.ts`.
    - A branch in `describeAlert` in the same file, with a tag, title and detail message.
-6. **Wire it into `run.py`.** Instantiate the detector in `main()` (with a CLI flag if it should be optional or tunable) and add its `update(...)` result to the `events` list. Optionally add its state to `_draw`.
+6. **Wire it into `watchdog.py` and `flags.py`.**
+   - Add an index constant in `vision/flags.py` (for example `FALL_ACTIVE, DEAD_ACTIVE, BATHROOM_ACTIVE, <NEW>_ACTIVE = 0, 1, 2, 3`) and extend `DEFAULT_ACTIVE_FLAGS`.
+   - In `watchdog.py`, add a field to `Detectors`, build it in `build_detectors` when its flag is set, and call its `update(...)` in `Detectors.update`.
+   - `run.py` picks the event up through `build_detectors`. Update the flag list it passes there, and optionally add a CLI override and a line in `_draw`.
+   - Rebuild the image. Saved devices keep their old, shorter flag lists, and their watchdog fails to start until the flags are updated (`PUT /devices/<name>/active-flags`) or the `devices` table is reset.
 7. **Test locally before involving the backend.**
    1. Run `python -m vision.run --source file:clip.mp4 --show --no-emit` on a recorded clip, or use a live RTSP stream with `--show --no-emit`.
    2. Use a short timeout flag so you don't wait for the real one.

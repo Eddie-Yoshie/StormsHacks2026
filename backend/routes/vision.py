@@ -5,6 +5,9 @@ from typing import Any, Literal
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from backend.routes.devices import FIRST_VISION_FLAG, raise_flag
+from vision.flags import ACTIVE_INDEX_BY_KIND
+
 router = APIRouter(prefix="/vision", tags=["vision"])
 
 
@@ -28,6 +31,9 @@ async def add_event(event: FallEventIn) -> dict[str, Any]:
     stored = {"id": _next_id, "received_at": time.time(), **event.model_dump()}
     _next_id += 1
     _events.append(stored)
+    index = ACTIVE_INDEX_BY_KIND.get(event.kind)
+    if index is not None:
+        raise_flag(event.camera_id, FIRST_VISION_FLAG + index)
     for ws in list(_clients):
         try:
             await ws.send_json({"type": "fall", "event": stored})

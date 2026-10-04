@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Integer, String, JSON
 from sqlalchemy.orm import Mapped, mapped_column
+from vision.flags import DEFAULT_ACTIVE_FLAGS
 from .database import base
 
 class Device(base):
