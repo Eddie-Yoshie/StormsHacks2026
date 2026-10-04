@@ -25,6 +25,8 @@ import {
   NInput,
   NFormItem,
   NNotificationProvider,
+  NCheckbox,
+  NSwitch,
 } from 'naive-ui';
 import App from './App.vue';
 
@@ -53,6 +55,8 @@ const naive = create({
     NInput,
     NFormItem,
     NNotificationProvider,
+    NCheckbox,
+    NSwitch,
   ],
 });
 

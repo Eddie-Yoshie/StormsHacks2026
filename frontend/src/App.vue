@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { NButton, type FormInst } from 'naive-ui';
+import { NButton, NTag, type FormInst } from 'naive-ui';
 import { useCamerasStore } from './stores/cameras';
 import { useEventsStore } from './stores/events';
+import { addDevice, removeDevice } from './services/api';
+import { kindLabel, useFallEvents } from './composables/useFallEvents';
+import { DEFAULT_ACTIVE_FLAGS, DETECTOR_LABELS } from './types/camera';
 import AlertNotifier from './components/AlertNotifier.vue';
 import CameraCard from './components/CameraCard.vue';
 
@@ -13,16 +16,23 @@ const { cameras, loading, error, activeCamera } = storeToRefs(store);
 const eventsStore = useEventsStore();
 const { events, loading: eventsLoading, error: eventsError } = storeToRefs(eventsStore);
 
+const { onAlert } = useFallEvents();
+
 const formatTimestamp = (timestamp: string): string =>
   new Date(timestamp).toLocaleString();
 
+// Live alerts refresh the history at once; the slower poll is only a fallback.
+const unsubscribeAlerts = onAlert(() => void eventsStore.fetchEvents());
+
 onMounted(() => {
-  void store.fetchCameras();
-  eventsStore.startPolling(1000);
+  store.startPolling();
+  eventsStore.startPolling(5000);
 });
 
 onUnmounted(() => {
+  store.stopPolling();
   eventsStore.stopPolling();
+  unsubscribeAlerts();
 });
 
 const menuOptions = computed(() =>
@@ -30,7 +40,12 @@ const menuOptions = computed(() =>
     key: camera.id,
     label: () =>
       h('div', { class: 'menu-row' }, [
-        h('span', camera.name),
+        h('span', { class: 'menu-row__name' }, [
+          camera.name,
+          camera.flags.some(Boolean)
+            ? h(NTag, { size: 'tiny', type: 'error', round: true, style: 'margin-left: 6px' }, { default: () => '!' })
+            : null,
+        ]),
         h(
           NButton,
           {
@@ -40,15 +55,9 @@ const menuOptions = computed(() =>
             onClick: async (e: MouseEvent) => {
               e.stopPropagation();
               removing.value = true;
+              removeError.value = null;
               try {
-                const res = await fetch(`${apiBaseUrl}/devices/${camera.name}`, {
-                  method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
-                });
-                if (!res.ok) {
-                  const detail = await res.text();
-                  throw new Error(`Failed to remove camera (${res.status}): ${detail}`);
-                }
+                await removeDevice(camera.id);
                 store.removeCamera(camera.id);
               } catch (err) {
                 removeError.value = err instanceof Error ? err.message : String(err);
@@ -70,12 +79,13 @@ const submitError = ref<string | null>(null)
 const removing = ref(false)
 const removeError = ref<string | null>(null)
 
-const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-
-const formValue = ref({
+const emptyForm = () => ({
   rtspURL: '',
-  name: ''
+  name: '',
+  activeFlags: [...DEFAULT_ACTIVE_FLAGS],
 })
+
+const formValue = ref(emptyForm())
 
 const rules = {
   rtspURL: {
@@ -100,20 +110,11 @@ const handleSubmit = async (e: MouseEvent) => {
   }
   submitting.value = true;
   try {
-    const res = await fetch(`${apiBaseUrl}/devices`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: formValue.value.name,
-        rtsp_url: formValue.value.rtspURL,
-      }),
-    });
-    if (!res.ok) {
-      const detail = await res.text();
-      throw new Error(`Failed to add camera (${res.status}): ${detail}`);
-    }
-    store.addCamera(formValue.value.name);
-    formValue.value = { rtspURL: '', name: '' };
+    const name = formValue.value.name.trim();
+    await addDevice(name, formValue.value.rtspURL.trim(), formValue.value.activeFlags);
+    await store.fetchCameras();
+    store.selectCamera(name);
+    formValue.value = emptyForm();
     showModal.value = false;
   } catch (err) {
     submitError.value = err instanceof Error ? err.message : String(err);
@@ -162,6 +163,14 @@ const handleSubmit = async (e: MouseEvent) => {
   border-radius: 6px;
 }
 
+.event-row--selectable {
+  cursor: pointer;
+}
+
+.event-row--selectable:hover {
+  border-color: rgb(208, 48, 80);
+}
+
 .event-row__time {
   font-size: 12px;
   color: rgb(118, 124, 130);
@@ -190,6 +199,10 @@ const handleSubmit = async (e: MouseEvent) => {
           <n-menu :value="activeCamera?.id" :options="menuOptions"
             @update:value="(key: string) => store.selectCamera(key)" />
           <n-button @click="showModal = true" style="margin-left: 24px;">Add Camera</n-button>
+          <n-alert v-if="removeError" type="error" :bordered="false" closable style="margin: 12px"
+            @close="removeError = null">
+            {{ removeError }}
+          </n-alert>
           <n-modal v-model:show="showModal">
             <n-card style="width: 600px" title="Add Camera" :bordered="false" size="huge" role="dialog"
               aria-modal="true">
@@ -199,6 +212,12 @@ const handleSubmit = async (e: MouseEvent) => {
                 </n-form-item>
                 <n-form-item label="Name" path="name">
                   <n-input v-model:value="formValue.name" placeholder="Input name" />
+                </n-form-item>
+                <n-form-item label="Detectors">
+                  <n-space>
+                    <n-checkbox v-for="(label, i) in DETECTOR_LABELS" :key="label"
+                      v-model:checked="formValue.activeFlags[i]">{{ label }}</n-checkbox>
+                  </n-space>
                 </n-form-item>
               </n-form>
 
@@ -217,11 +236,15 @@ const handleSubmit = async (e: MouseEvent) => {
         </n-layout-sider>
         <n-layout-content style="padding: 24px">
           <n-spin :show="loading">
-            <n-alert v-if="error" type="error" title="Failed to load cameras" :bordered="false">
+            <n-alert v-if="error && cameras.length === 0" type="error" title="Failed to load cameras" :bordered="false">
               {{ error }}
             </n-alert>
 
             <div v-else>
+              <!-- Keep the stream up through a failed refresh; just say the backend is unreachable. -->
+              <n-alert v-if="error" type="warning" :bordered="false" style="margin-bottom: 12px; max-width: 90%">
+                Lost contact with the backend: {{ error }}
+              </n-alert>
               <CameraCard v-if="activeCamera" :key="activeCamera.id" :camera="activeCamera" style="max-width: 90%" />
               <n-empty v-else description="No cameras configured" />
             </div>
@@ -239,11 +262,13 @@ const handleSubmit = async (e: MouseEvent) => {
             </n-alert>
             <n-empty v-else-if="events.length === 0" description="No events" />
             <div v-else class="event-list">
-              <div v-for="event in events" :key="event.id" class="event-row">
+              <div v-for="event in events" :key="event.id" class="event-row"
+                :class="{ 'event-row--selectable': cameras.some(cam => cam.id === event.cameraId) }"
+                @click="cameras.some(cam => cam.id === event.cameraId) && store.selectCamera(event.cameraId)">
                 <div class="event-row__time">{{ formatTimestamp(event.timestamp) }}</div>
                 <div class="event-row__meta">
                   <span>{{ event.cameraId }}</span>
-                  <n-tag size="small" type="warning">{{ event.eventType }}</n-tag>
+                  <n-tag size="small" :type="kindLabel(event.eventType).type">{{ kindLabel(event.eventType).tag }}</n-tag>
                 </div>
               </div>
             </div>
