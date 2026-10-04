@@ -34,5 +34,5 @@ You will end up with a command that looks like this:
 ## Linux
 Initializing your webcam as a RTSP stream is very simple, ensure you have FFMPEG (on Ubuntu/Debian run `sudo apt install ffmpeg`) installed and run:
 ```bash
-ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -preset ultrafast -rtbufsize 500M -f rtsp -rtsp_transport tcp rtsp://localhost:8554/webcam
+ffmpeg -f v4l2 -i /dev/video0 -f alsa -i default -c:v libx264 -preset ultrafast -pix_fmt yuv420p -rtbufsize 500M -f rtsp -rtsp_transport tcp rtsp://localhost:8554/webcam
 ```
