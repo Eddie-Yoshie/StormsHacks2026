@@ -61,7 +61,7 @@ class BathroomConfig:
     timeout_s: float = 0.5 * 60
     # Pose dropouts shorter than this don't count as leaving (occlusion by a door or curtain, a
     # missed detection). Gone this long means the room is empty and the timer resets.
-    absent_reset_s: float = 15.0
+    absent_reset_s: float = timeout_s / 60
 
 
 @dataclass(frozen=True)
