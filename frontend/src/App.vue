@@ -150,7 +150,7 @@ const handleSubmit = async (e: MouseEvent) => {
       </n-layout-header>
       <n-layout position="absolute" style="top: 64px; bottom: 0" has-sider>
         <n-layout-sider :native-scrollbar="false" bordered>
-          <n-menu :value="activeCamera" :options="menuOptions"
+          <n-menu :value="activeCamera?.id" :options="menuOptions"
             @update:value="(key: string) => store.selectCamera(key)" />
         </n-layout-sider>
         <n-layout-content style="padding: 24px">
@@ -160,7 +160,7 @@ const handleSubmit = async (e: MouseEvent) => {
             </n-alert>
 
             <div v-else>
-              <CameraCard v-if="activeCamera" :camera="activeCamera" style="max-width: 90%" />
+              <CameraCard v-if="activeCamera" :key="activeCamera.id" :camera="activeCamera" style="max-width: 90%" />
               <n-empty v-else description="No cameras configured" />
             </div>
 
