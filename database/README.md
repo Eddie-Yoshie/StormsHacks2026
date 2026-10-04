@@ -15,3 +15,8 @@ tiup playground
 ```
 
 This may fail, and prompt you to install some additional dependencies (e.x. Prometheus). Please run the command(s) you are told to run in the error message.
+
+If you need to reset your cluster, you can run:
+```bash
+tiup clean playground --all
+```
