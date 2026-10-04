@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import String, JSON
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, Integer, String, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import base
 
@@ -8,9 +9,14 @@ class Device(base):
 
     name: Mapped[str] = mapped_column(String(255), primary_key=True)
     flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=list)
+    active_flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=list)
 
-class DeviceSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class Event(base):
+    __tablename__ = "events"
 
-    name: str
-    flags: list[bool] = Field(default_factory=list)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    camera_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now(timezone.utc), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
