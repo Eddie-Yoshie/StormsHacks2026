@@ -2,6 +2,7 @@ requests
 fastapi
 uvicorn
 websockets
-# Local fall detection (vision/). mediapipe brings opencv-contrib-python; don't also install opencv-python.
+# Local fall detection (vision/). mediapipe brings opencv-contrib-python, which also provides cv2 for
+# backend/streams.py; don't also install opencv-python (both install cv2 and clobber each other).
 mediapipe
 numpy
