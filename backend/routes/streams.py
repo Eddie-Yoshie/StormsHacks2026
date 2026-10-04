@@ -28,6 +28,8 @@ def get_webrtc_url(name: str) -> str:
 
 def delete_stream(name: str) -> None:
     response = requests.delete(f"{base_url}/delete/{name}", timeout=5)
+    if response.status_code == 404:  # already gone, e.g. MediaMTX restarted and forgot API-added paths
+        return
     response.raise_for_status()
 
 

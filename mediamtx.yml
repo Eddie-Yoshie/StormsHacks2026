@@ -8,6 +8,10 @@ webrtcAllowOrigins: ["*"]
 # so browsers must reach MediaMTX over the LAN address.
 webrtcAdditionalHosts: ["127.0.0.1", "172.16.184.203"]
 
+# Also offer ICE over TCP. Docker Desktop (Windows/macOS) host networking doesn't carry
+# WebRTC's UDP to the browser, so without this the video stays black there.
+webrtcLocalTCPAddress: :8189
+
 api: yes
 apiAddress: :9997
 

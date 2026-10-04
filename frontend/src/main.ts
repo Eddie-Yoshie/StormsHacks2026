@@ -10,6 +10,7 @@ import {
   NGi,
   NGrid,
   NH2,
+  NH4,
   NLayout,
   NLayoutContent,
   NLayoutHeader,
@@ -24,6 +25,9 @@ import {
   NInput,
   NFormItem,
   NNotificationProvider,
+  NGlobalStyle,
+  NCheckbox,
+  NSwitch,
 } from 'naive-ui';
 import App from './App.vue';
 
@@ -37,6 +41,7 @@ const naive = create({
     NGi,
     NGrid,
     NH2,
+    NH4,
     NLayout,
     NLayoutContent,
     NLayoutHeader,
@@ -51,6 +56,9 @@ const naive = create({
     NInput,
     NFormItem,
     NNotificationProvider,
+    NGlobalStyle,
+    NCheckbox,
+    NSwitch,
   ],
 });
 

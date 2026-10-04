@@ -1,15 +1,20 @@
+from collections.abc import Iterable
 from typing import Annotated, Any
 import logging
 import threading
+import time
 import requests
 
 from fastapi import APIRouter, Body, HTTPException
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from backend.dependencies.database import SessionDependency
+from database.database import engine
 from database.models import Device
 from vision.flags import DEFAULT_ACTIVE_FLAGS
 
-from backend.routes import containers, streams
+from backend.routes import alerts, containers, streams
 from backend.routes.audio import watch_loud_noise
 
 log = logging.getLogger(__name__)
@@ -39,9 +44,33 @@ def raise_flag(name: str, index: int) -> None:
     flags.extend([False] * (index + 1 - len(flags)))  # rows saved before more flags existed are shorter
     flags[index] = True
 
+def clear_flags(name: str) -> None:
+    if name in state["device_list"]:
+        state["device_list"][name] = [False] * FLAG_COUNT
+
 # watchers
+# The watcher reports every 0.25 s while it stays loud; record at most one event per camera per window.
+NOISE_EVENT_COOLDOWN_S = 30.0
+_last_noise_event: dict[str, float] = {}
+
 def _on_loud(name: str, level_db: float) -> None:
+    """Runs on the camera's noise watcher thread."""
+    # Removed or switched off: the watcher only notices its stop event on the next audio frame.
+    if name not in state["device_list"] or name not in _noise_watchers:
+        return
     raise_flag(name, NOISE_FLAG)
+    now = time.time()
+    if now - _last_noise_event.get(name, 0.0) < NOISE_EVENT_COOLDOWN_S:
+        return
+    _last_noise_event[name] = now
+    try:
+        with Session(bind=engine) as db:
+            event_id = alerts.store_event(db, name, now, alerts.LOUD_NOISE)
+    except SQLAlchemyError as e:
+        log.warning("Could not store loud-noise event for %s: %s", name, e)
+        return
+    details = {"level_db": round(level_db, 1)}
+    alerts.publish_threadsafe(alerts.make_stored(event_id, name, now, alerts.LOUD_NOISE, "high", details))
 
 def _start_noise_watcher(name: str) -> None:
     stop = threading.Event()
@@ -56,6 +85,12 @@ def _stop_noise_watcher(name: str) -> None:
     stop = _noise_watchers.pop(name, None)
     if stop is not None:
         stop.set()
+
+def start_noise_watchers(names: Iterable[str]) -> None:
+    """Start a noise watcher for each device not already being watched (e.g. on backend startup)."""
+    for name in names:
+        if name not in _noise_watchers:
+            _start_noise_watcher(name)
 
 def _checked_active_flags(active_flags: list[bool] | None) -> list[bool]:
     flags = list(DEFAULT_ACTIVE_FLAGS) if active_flags is None else list(active_flags)
@@ -76,7 +111,9 @@ def get_state(db: SessionDependency) -> dict[str, Any]:
         if name in device_list:
             device_list[name] = flags
     state["device_list"] = device_list
-    return {"state": read_state()}
+    active_flags = {device.name: list(device.active_flags or DEFAULT_ACTIVE_FLAGS) for device in devices}
+    noise_enabled = {device.name: device.noise_enabled for device in devices}
+    return {"state": read_state(), "active_flags": active_flags, "noise_enabled": noise_enabled}
 
 @router.put("/active")
 def set_active_device(name: Annotated[str, Body(embed=True)]) -> dict[str, str]:
@@ -101,6 +138,7 @@ def add_device(
     rtsp_url: Annotated[str, Body()],
     db: SessionDependency,
     active_flags: Annotated[list[bool] | None, Body()] = None,
+    noise_enabled: Annotated[bool, Body()] = True,
 ) -> dict[str, Any]:
     """Register the stream with MediaMTX, start its vision container, then record the device in the app state and database."""
     try:
@@ -126,13 +164,14 @@ def add_device(
             log.warning("Could not roll back MediaMTX stream %r after container failure", name)
         raise HTTPException(status_code=502, detail=f"Vision container failed to start: {e}")
 
-    db.add(Device(name=name, flags=[False] * FLAG_COUNT, active_flags=flags))
+    db.add(Device(name=name, flags=[False] * FLAG_COUNT, active_flags=flags, noise_enabled=noise_enabled))
     db.commit()
 
     state["device_list"][name] = [False] * FLAG_COUNT
     if not state["active_device"]:
         state["active_device"] = name
-    _start_noise_watcher(name)
+    if noise_enabled:
+        _start_noise_watcher(name)
     return result
 
 @router.delete("/{name}", status_code=204)
@@ -140,11 +179,13 @@ def remove_device(name: str, db: SessionDependency) -> None:
     """Remove the stream from MediaMTX, then drop the device from the app state."""
     if name not in state["device_list"]:
         raise HTTPException(status_code=404, detail=f"No device named {name!r}")
+    was_watching = name in _noise_watchers
     _stop_noise_watcher(name)
     try:
         streams.delete_stream(name)
     except requests.RequestException as e:
-        _start_noise_watcher(name)
+        if was_watching:
+            _start_noise_watcher(name)
         raise HTTPException(status_code=502, detail=f"MediaMTX request failed: {e}")
 
     device = db.get(Device, name)
@@ -178,3 +219,20 @@ def set_active_flags(
     device.active_flags = flags
     db.commit()
     return {"name": name, "active_flags": flags}
+
+@router.put("/{name}/noise")
+def set_noise_enabled(name: str, enabled: Annotated[bool, Body(embed=True)], db: SessionDependency) -> dict[str, Any]:
+    """Turn loud-noise detection (flag and events) on or off for a camera."""
+    device = db.get(Device, name)
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"No device named {name!r}")
+    device.noise_enabled = enabled
+    db.commit()
+    if enabled:
+        start_noise_watchers([name])
+    else:
+        _stop_noise_watcher(name)
+        flags = state["device_list"].get(name)
+        if flags:
+            flags[NOISE_FLAG] = False  # don't leave a badge up for a detector that's now off
+    return {"name": name, "noise_enabled": enabled}

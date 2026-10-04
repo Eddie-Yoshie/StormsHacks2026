@@ -1,20 +1,26 @@
-import type { Camera } from '../types/camera';
+import { DEFAULT_ACTIVE_FLAGS, type Camera } from '../types/camera';
+import { apiBaseUrl } from './api';
 
 /**
- * Provider seam for the camera list. Today the list is static/env-driven;
- * when the backend camera-management API exists, swap the implementation
- * in createCameraProvider() — nothing else changes.
+ * Provider seam for the camera list, backed by the backend's /devices/state.
  */
-export interface CameraProvider {
-  listCameras(): Promise<Camera[]>;
+export interface CameraList {
+  cameras: Camera[];
+  /** The backend's active device, or '' when there is none. */
+  activeDevice: string;
 }
 
+export interface CameraProvider {
+  listCameras(): Promise<CameraList>;
+}
 
 interface StateResponse {
   state: {
     active_device: string;
-    device_list: Record<string, unknown>;
+    device_list: Record<string, boolean[]>;
   };
+  active_flags: Record<string, boolean[]>;
+  noise_enabled: Record<string, boolean>;
 }
 
 export class BackendCameraProvider implements CameraProvider {
@@ -24,17 +30,23 @@ export class BackendCameraProvider implements CameraProvider {
     this.baseUrl = baseUrl;
   }
 
-  async listCameras(): Promise<Camera[]> {
+  async listCameras(): Promise<CameraList> {
     const res = await fetch(`${this.baseUrl}/devices/state`);
     if (!res.ok) {
       throw new Error(`Failed to load cameras (${res.status})`);
     }
     const data = (await res.json()) as StateResponse;
-    return Object.keys(data.state.device_list).map((id) => ({ id, name: id }));
+    const cameras = Object.entries(data.state.device_list).map(([id, flags]) => ({
+      id,
+      name: id,
+      flags,
+      activeFlags: data.active_flags[id] ?? [...DEFAULT_ACTIVE_FLAGS],
+      noiseEnabled: data.noise_enabled[id] ?? true,
+    }));
+    return { cameras, activeDevice: data.state.active_device };
   }
 }
 
 export function createCameraProvider(): CameraProvider {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-  return new BackendCameraProvider(baseUrl);
+  return new BackendCameraProvider(apiBaseUrl);
 }

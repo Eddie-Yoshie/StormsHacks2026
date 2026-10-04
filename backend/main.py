@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import asyncio
+import os
 
 import uvicorn
 from fastapi import FastAPI
@@ -9,8 +10,8 @@ from sqlalchemy.orm import Session
 from database.database import create_db_and_tables, engine
 from database.models import Device
 from vision.flags import DEFAULT_ACTIVE_FLAGS
-from backend.routes import containers
-from backend.routes.devices import router as devices_router, state as device_state
+from backend.routes import alerts, containers
+from backend.routes.devices import router as devices_router, start_noise_watchers, state as device_state
 from backend.routes.vision import router as vision_router
 from backend.routes.events import router as events_router
 
@@ -22,14 +23,20 @@ async def lifespan(app: FastAPI):
         devices = {d.name: list(d.active_flags or DEFAULT_ACTIVE_FLAGS) for d in rows}
         # Containers outlive the backend, so events can arrive before the dashboard calls /devices/state.
         device_state["device_list"] = {d.name: list(d.flags) for d in rows}
+        noisy = [d.name for d in rows if d.noise_enabled]
     await asyncio.to_thread(containers.reconcile, devices)  # docker calls block
+    alerts.bind_loop(asyncio.get_running_loop())  # noise watcher threads publish events through it
+    start_noise_watchers(noisy)
     yield
 
 app = FastAPI(lifespan=lifespan)
 
+# Vite dev origins by default; set CORS_ORIGINS (comma-separated) to open the dashboard from another host.
+cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],  # Vite dev origin; add LAN origin too if needed
+    allow_origins=[origin.strip() for origin in cors_origins.split(",") if origin.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )
