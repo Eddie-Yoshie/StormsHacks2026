@@ -1,8 +1,25 @@
+# Git and editor cruft
 .git
+.gitignore
+
+# Local Python envs / caches
 .venv
+.direnv
 **/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Not needed by the backend or vision images
 frontend
-backend
-database
 tests
+
+# Downloaded at image build time by vision/Dockerfile (large)
 vision/models
+
+# MediaMTX runtime data and generated certs
+mediamtx
+auto.crt
+auto.key
+
+# Local MySQL data, if ever bind-mounted
+db_data
