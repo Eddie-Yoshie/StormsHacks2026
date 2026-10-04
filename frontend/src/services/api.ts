@@ -1,6 +1,8 @@
 /** Mutating calls to the backend. Reads go through the providers in this folder. */
 
-export const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import { resolveServiceUrl } from './urls';
+
+export const apiBaseUrl: string = resolveServiceUrl(import.meta.env.VITE_API_BASE_URL, 8000);
 
 async function send(method: string, path: string, body?: unknown): Promise<Response> {
   const res = await fetch(`${apiBaseUrl}${path}`, {

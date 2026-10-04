@@ -4,6 +4,7 @@ import { useCameraStream, type StreamStatus } from '../composables/useCameraStre
 import { describeAlert, useFallEvents } from '../composables/useFallEvents';
 import { useCamerasStore } from '../stores/cameras';
 import { setActiveFlags, setNoiseEnabled } from '../services/api';
+import { resolveServiceUrl } from '../services/urls';
 import {
   BATHROOM_ACTIVE,
   DEAD_ACTIVE,
@@ -17,7 +18,7 @@ import {
 const props = defineProps<{ camera: Camera }>();
 const store = useCamerasStore();
 
-const baseUrl: string = import.meta.env.VITE_MEDIAMTX_BASE_URL ?? 'http://localhost:8889';
+const baseUrl: string = resolveServiceUrl(import.meta.env.VITE_MEDIAMTX_BASE_URL, 8889);
 
 const videoEl = useTemplateRef<HTMLVideoElement>('video');
 const muted = ref(true);

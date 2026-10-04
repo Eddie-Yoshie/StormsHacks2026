@@ -33,10 +33,18 @@ app = FastAPI(lifespan=lifespan)
 
 # Vite dev origins by default; set CORS_ORIGINS (comma-separated) to open the dashboard from another host.
 cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174")
+# Also accept any LAN origin (e.g. the dashboard opened from a phone), since host IPs can change.
+cors_origin_regex = os.environ.get(
+    "CORS_ORIGIN_REGEX",
+    r"^https?://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in cors_origins.split(",") if origin.strip()],
+    allow_origin_regex=cors_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -3,10 +3,11 @@
 
 webrtcAllowOrigins: ["*"]
 
-# Advertise loopback AND the LAN IP as ICE candidates. Firefox ignores
+# Advertise loopback AND the host's LAN IPs as ICE candidates. Firefox ignores
 # loopback candidates (media.peerconnection.ice.loopback defaults off),
-# so browsers must reach MediaMTX over the LAN address.
-webrtcAdditionalHosts: ["127.0.0.1", "172.16.184.203"]
+# so browsers must reach MediaMTX over the LAN address. Keep this in sync with
+# the host's current IPs (wlp0s20f3 = 172.16.184.203, USB net = 172.20.10.5).
+webrtcAdditionalHosts: ["127.0.0.1", "172.16.184.203", "172.20.10.5"]
 
 # Also offer ICE over TCP. Docker Desktop (Windows/macOS) host networking doesn't carry
 # WebRTC's UDP to the browser, so without this the video stays black there.

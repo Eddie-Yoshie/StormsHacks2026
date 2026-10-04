@@ -31,7 +31,7 @@ python3 -m backend.main
 
 To run mediatx for converting RTSP into HTML-friendly data:
 ```bash
-docker compose up -d
+docker compose up -d mediamtx
 ```
 
 ### Running with Docker Desktop (Windows/macOS)

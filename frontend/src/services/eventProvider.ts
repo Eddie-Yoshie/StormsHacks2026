@@ -1,4 +1,5 @@
 import type { Event } from '../types/event';
+import { resolveServiceUrl } from './urls';
 
 /**
  * Provider seam for the event list. Fetches events from the backend
@@ -38,6 +39,6 @@ export class BackendEventProvider implements EventProvider {
 }
 
 export function createEventProvider(): EventProvider {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+  const baseUrl = resolveServiceUrl(import.meta.env.VITE_API_BASE_URL, 8000);
   return new BackendEventProvider(baseUrl);
 }
