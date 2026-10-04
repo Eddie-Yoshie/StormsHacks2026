@@ -25,9 +25,24 @@ const menuOptions = computed(() =>
             size: 'tiny',
             quaternary: true,
             type: 'error',
-            onClick: (e: MouseEvent) => {
+            onClick: async (e: MouseEvent) => {
               e.stopPropagation();
-              store.removeCamera(camera.id);
+              removing.value = true;
+              try {
+                const res = await fetch(`${apiBaseUrl}/devices/${camera.name}`, {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                });
+                if (!res.ok) {
+                  const detail = await res.text();
+                  throw new Error(`Failed to remove camera (${res.status}): ${detail}`);
+                }
+                store.removeCamera(camera.id);
+              } catch (err) {
+                removeError.value = err instanceof Error ? err.message : String(err);
+              } finally {
+                removing.value = false;
+              }
             }
           },
           { default: () => 'X' }
@@ -40,6 +55,8 @@ const showModal = ref(false)
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
+const removing = ref(false)
+const removeError = ref<string | null>(null)
 
 const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
