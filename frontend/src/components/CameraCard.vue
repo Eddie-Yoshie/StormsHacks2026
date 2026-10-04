@@ -95,19 +95,20 @@ function fullscreen(): void {
     </template>
 
     <n-alert v-if="fall && alertText" type="error" :title="alertText.title" class="fall-alert">
-      {{ fallTime }} · {{ alertText.detail }}
-      <template #action>
+      <!-- n-alert has no action slot, so the button lives in the body. -->
+      <div class="alert-row">
+        <span>{{ fallTime }} · {{ alertText.detail }}</span>
         <n-button size="small" @click="dismiss(camera.id)">Dismiss</n-button>
-      </template>
+      </div>
     </n-alert>
 
     <n-alert v-else-if="flagBadges.length" type="warning" :bordered="false" class="fall-alert">
-      <n-space size="small" align="center">
-        <n-tag v-for="badge in flagBadges" :key="badge.label" :type="badge.type" size="small">{{ badge.label }}</n-tag>
-      </n-space>
-      <template #action>
+      <div class="alert-row">
+        <n-space size="small" align="center">
+          <n-tag v-for="badge in flagBadges" :key="badge.label" :type="badge.type" size="small">{{ badge.label }}</n-tag>
+        </n-space>
         <n-button size="small" @click="dismiss(camera.id)">Acknowledge</n-button>
-      </template>
+      </div>
     </n-alert>
 
     <div class="video-wrap">
@@ -176,6 +177,13 @@ video {
 
 .fall-alert {
   margin-bottom: 8px;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .error {
