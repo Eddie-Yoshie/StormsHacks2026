@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { NButton, NTag, type FormInst } from 'naive-ui';
+import { NButton, NTag, darkTheme, type FormInst } from 'naive-ui';
 import { useCamerasStore } from './stores/cameras';
 import { useEventsStore } from './stores/events';
 import { addDevice, removeDevice } from './services/api';
@@ -159,7 +159,7 @@ const handleSubmit = async (e: MouseEvent) => {
 
 .event-row {
   padding: 8px 10px;
-  border: 1px solid rgb(239, 239, 245);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 6px;
 }
 
@@ -168,12 +168,12 @@ const handleSubmit = async (e: MouseEvent) => {
 }
 
 .event-row--selectable:hover {
-  border-color: rgb(208, 48, 80);
+  border-color: rgb(232, 128, 128);
 }
 
 .event-row__time {
   font-size: 12px;
-  color: rgb(118, 124, 130);
+  color: rgba(255, 255, 255, 0.52);
 }
 
 .event-row__meta {
@@ -186,7 +186,8 @@ const handleSubmit = async (e: MouseEvent) => {
 </style>
 
 <template>
-  <n-config-provider>
+  <n-config-provider :theme="darkTheme">
+    <n-global-style />
     <n-notification-provider placement="top-right" :max="10">
       <AlertNotifier />
     </n-notification-provider>
@@ -254,7 +255,7 @@ const handleSubmit = async (e: MouseEvent) => {
             </n-dropdown> -->
           </n-spin>
         </n-layout-content>
-        <n-layout-sider style="border-left: 1px solid rgb(239, 239, 245);" :native-scrollbar="false" content-style="padding: 16px;">
+        <n-layout-sider style="border-left: 1px solid rgba(255, 255, 255, 0.09);" :native-scrollbar="false" content-style="padding: 16px;">
           <n-h4 style="margin: 0 0 12px">Events</n-h4>
           <n-spin :show="eventsLoading">
             <n-alert v-if="eventsError" type="error" :bordered="false">

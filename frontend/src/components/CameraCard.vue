@@ -172,7 +172,7 @@ video {
 }
 
 .falling {
-  outline: 3px solid #d03050;
+  outline: 3px solid rgb(232, 128, 128);
 }
 
 .fall-alert {
