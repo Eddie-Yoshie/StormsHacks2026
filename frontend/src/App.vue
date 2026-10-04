@@ -3,6 +3,7 @@ import { computed, h, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { NButton, type FormInst } from 'naive-ui';
 import { useCamerasStore } from './stores/cameras';
+import AlertNotifier from './components/AlertNotifier.vue';
 import CameraCard from './components/CameraCard.vue';
 
 const store = useCamerasStore();
@@ -123,6 +124,9 @@ const handleSubmit = async (e: MouseEvent) => {
 
 <template>
   <n-config-provider>
+    <n-notification-provider placement="top-right" :max="10">
+      <AlertNotifier />
+    </n-notification-provider>
     <n-layout style="min-height: 100vh">
       <n-layout-header bordered style="padding: 12px 24px">
         <n-h2 style="margin: 0">Stream Monitor</n-h2>

@@ -51,3 +51,14 @@ class FallConfig:
     posture_frames: int = 4
     # Minimum mean visibility of shoulders + hips for a pose to be used.
     min_torso_visibility: float = 0.3
+
+
+@dataclass(frozen=True)
+class BathroomConfig:
+    """Bathroom timeout: alert when someone stays in view of a bathroom camera too long."""
+
+    # Continuous presence that triggers an alert (e.g. can't get up from the toilet).
+    timeout_s: float = 15 * 60
+    # Pose dropouts shorter than this don't count as leaving (occlusion by a door or curtain, a
+    # missed detection). Gone this long means the room is empty and the timer resets.
+    absent_reset_s: float = 15.0

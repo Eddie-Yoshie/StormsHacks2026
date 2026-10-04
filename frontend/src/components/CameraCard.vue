@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from 'vue';
 import { useCameraStream, type StreamStatus } from '../composables/useCameraStream';
-import { useFallEvents } from '../composables/useFallEvents';
+import { describeAlert, useFallEvents } from '../composables/useFallEvents';
 import type { Camera } from '../types/camera';
 
 const props = defineProps<{ camera: Camera }>();
@@ -14,6 +14,7 @@ const { status, errorMessage, reconnect } = useCameraStream(props.camera.id, vid
 const { falls, dismiss } = useFallEvents();
 const fall = computed(() => falls[props.camera.id]);
 const fallTime = computed(() => (fall.value ? new Date(fall.value.ts * 1000).toLocaleTimeString() : ''));
+const alertText = computed(() => (fall.value ? describeAlert(fall.value) : null));
 
 const statusMeta = computed<{ label: string; type: 'default' | 'info' | 'success' | 'error' }>(() => {
   switch (status.value as StreamStatus) {
@@ -44,13 +45,13 @@ function fullscreen(): void {
   <n-card :title="camera.name" size="small" :class="{ falling: fall }">
     <template #header-extra>
       <n-space size="small">
-        <n-tag v-if="fall" type="error" size="small">FALL</n-tag>
+        <n-tag v-if="alertText" type="error" size="small">{{ alertText.tag }}</n-tag>
         <n-tag :type="statusMeta.type" size="small" :bordered="false">{{ statusMeta.label }}</n-tag>
       </n-space>
     </template>
 
-    <n-alert v-if="fall" type="error" title="Fall detected" class="fall-alert">
-      {{ fallTime }} · {{ fall.confidence === 'high' ? 'High confidence' : 'Low confidence (person left view)' }}
+    <n-alert v-if="fall && alertText" type="error" :title="alertText.title" class="fall-alert">
+      {{ fallTime }} · {{ alertText.detail }}
       <template #action>
         <n-button size="small" @click="dismiss(camera.id)">Dismiss</n-button>
       </template>
