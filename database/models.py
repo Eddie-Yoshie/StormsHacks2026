@@ -11,7 +11,8 @@ class Device(base):
 
     name: Mapped[str] = mapped_column(String(255), primary_key=True)
     flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=list)
-    active_flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=list)
+    # which vision events the camera's watchdog runs: [fall, dead, bathroom]
+    active_flags: Mapped[list[bool]] = mapped_column(JSON, nullable=False, default=lambda: list(DEFAULT_ACTIVE_FLAGS))
 
 class Event(base):
     __tablename__ = "events"

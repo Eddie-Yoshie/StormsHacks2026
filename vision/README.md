@@ -116,6 +116,7 @@ The backend does the rest (`backend/routes/containers.py`, called from `backend/
    - A branch in `describeAlert` in the same file, with a tag, title and detail message.
 6. **Wire it into `watchdog.py` and `flags.py`.**
    - Add an index constant in `vision/flags.py` (for example `FALL_ACTIVE, DEAD_ACTIVE, BATHROOM_ACTIVE, <NEW>_ACTIVE = 0, 1, 2, 3`) and extend `DEFAULT_ACTIVE_FLAGS`.
+   - Add the event's `kind` to `ACTIVE_INDEX_BY_KIND` in the same file. The backend uses it to raise the device's matching flag when the event arrives (`FLAG_COUNT` in `devices.py` grows with `DEFAULT_ACTIVE_FLAGS`).
    - In `watchdog.py`, add a field to `Detectors`, build it in `build_detectors` when its flag is set, and call its `update(...)` in `Detectors.update`.
    - `run.py` picks the event up through `build_detectors`. Update the flag list it passes there, and optionally add a CLI override and a line in `_draw`.
    - Rebuild the image. Saved devices keep their old, shorter flag lists, and their watchdog fails to start until the flags are updated (`PUT /devices/<name>/active-flags`) or the `devices` table is reset.
