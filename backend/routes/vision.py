@@ -12,7 +12,7 @@ class FallEventIn(BaseModel):
     camera_id: str
     ts: float
     confidence: Literal["high", "low"]
-    kind: Literal["fall", "bathroom_timeout"] = "fall"
+    kind: Literal["fall", "bathroom_timeout", "dead_check"] = "fall"
     details: dict[str, Any] = {}
 
 

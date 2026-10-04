@@ -18,7 +18,7 @@ class FallEvent:
     camera_id: str
     ts: float  # unix seconds
     confidence: str  # "high" | "low"
-    kind: str = "fall"  # "fall" | "bathroom_timeout"
+    kind: str = "fall"  # "fall" | "bathroom_timeout" | "dead_check"
     details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

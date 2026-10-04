@@ -4,6 +4,7 @@
     python -m vision.run --camera demo --source webcam:0 --show
     python -m vision.run --camera demo --source file:clip.mp4 --show --no-emit
     python -m vision.run --camera bathroom1 --bathroom-timeout 15   # also alert after 15 min in view
+    python -m vision.run --camera bedroom1 --dead-timeout 10        # no-movement alert after 10 min instead of the default
 """
 
 import argparse
@@ -14,7 +15,8 @@ import cv2
 import numpy as np
 
 from vision.bathroom import BathroomTimer
-from vision.config import BACKEND_URL, PROCESS_WIDTH, BathroomConfig, FallConfig
+from vision.config import BACKEND_URL, PROCESS_WIDTH, BathroomConfig, DeadConfig, FallConfig
+from vision.dead import DeadDetector
 from vision.emitter import EventEmitter
 from vision.fall import FallDetector
 from vision.features import FeatureExtractor, Features
@@ -34,7 +36,7 @@ def _resize(frame: np.ndarray) -> np.ndarray:
 
 def _draw(
     frame: np.ndarray, pose: Pose | None, f: Features | None, posture: str, state: str, fps: float,
-    bathroom: BathroomTimer | None,
+    bathroom: BathroomTimer | None, dead: DeadDetector, ts_ms: int,
 ) -> None:
     """Debug overlay for the local --show window. Drawn in memory only; never written to disk."""
     if pose is not None:
@@ -48,6 +50,8 @@ def _draw(
         lines.append(f"angle {f.torso_angle:5.1f}  aspect {f.aspect:.2f}  vy {f.hip_vy:+.2f}  leg {leg}")
     if bathroom is not None:
         lines.append(f"bathroom: present {bathroom.present_s:5.0f}s / {bathroom.cfg.timeout_s:.0f}s")
+    motion = "-" if f is None or f.motion is None else f"{f.motion:.2f}"
+    lines.append(f"dead: still {dead.still_s(ts_ms):5.0f}s / {dead.cfg.still_s:.0f}s  motion {motion}")
     for i, text in enumerate(lines):
         cv2.putText(frame, text, (10, 24 + 24 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4)
         cv2.putText(frame, text, (10, 24 + 24 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
@@ -64,6 +68,10 @@ def main() -> None:
         "--bathroom-timeout", type=float, metavar="MINUTES",
         help="bathroom camera: alert when someone stays in view this many minutes (e.g. stuck on the toilet)",
     )
+    parser.add_argument(
+        "--dead-timeout", type=float, metavar="MINUTES",
+        help="alert when a detected person's pose doesn't move for this many minutes (default: DeadConfig.still_s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -75,6 +83,8 @@ def main() -> None:
     bathroom = None
     if args.bathroom_timeout is not None:
         bathroom = BathroomTimer(args.camera, BathroomConfig(timeout_s=args.bathroom_timeout * 60))
+    dead_cfg = DeadConfig() if args.dead_timeout is None else DeadConfig(still_s=args.dead_timeout * 60)
+    dead = DeadDetector(args.camera, dead_cfg)
 
     log.info("Fall detection on camera %r from %s", args.camera, args.source)
     fps = 0.0
@@ -93,7 +103,7 @@ def main() -> None:
             pose = estimator.detect(frame, ts_ms)
             f = features.update(pose, upright=posture.state == UPRIGHT)
             posture.update(f, ts_ms)
-            events = [detector.update(f, posture, ts_ms)]
+            events = [detector.update(f, posture, ts_ms), dead.update(f, ts_ms)]
             if bathroom is not None:
                 events.append(bathroom.update(pose, ts_ms))
             for event in events:
@@ -108,7 +118,7 @@ def main() -> None:
             last = now
 
             if args.show:
-                _draw(frame, pose, f, posture.state, detector.state, fps, bathroom)
+                _draw(frame, pose, f, posture.state, detector.state, fps, bathroom, dead, ts_ms)
                 cv2.imshow(f"OK - {args.camera}", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break

@@ -18,6 +18,7 @@ class Features:
     head_y: float
     aspect: float  # bounding box width / height of visible landmarks
     hip_vy: float  # smoothed hip velocity, body units/s, positive = moving down
+    motion: float | None  # smoothed mean landmark speed, body units/s; None until two comparable frames
     leg_drop: float | None  # (ankle_y - hip_y) in body units, None if ankles not visible
     scale: float  # body unit in pixels
 
@@ -40,19 +41,23 @@ class FeatureExtractor:
     def __init__(self, cfg: FallConfig) -> None:
         self.cfg = cfg
         self._upright_lengths: deque[float] = deque(maxlen=90)
-        self._prev: tuple[int, float] | None = None  # (ts_ms, hip_y)
+        self._prev: tuple[int, float, np.ndarray, np.ndarray] | None = None  # (ts_ms, hip_y, xy, visible mask)
         self._vy = 0.0
+        self._motion: float | None = None
+
+    def _reset(self) -> None:
+        self._prev = None
+        self._vy = 0.0
+        self._motion = None
 
     def update(self, pose: Pose | None, upright: bool) -> Features | None:
         if pose is None:
-            self._prev = None
-            self._vy = 0.0
+            self._reset()
             return None
         xy, vis = pose.xy, pose.visibility
         torso_vis = float(np.mean(vis[[L_SHOULDER, R_SHOULDER, L_HIP, R_HIP]]))
         if torso_vis < self.cfg.min_torso_visibility:
-            self._prev = None
-            self._vy = 0.0
+            self._reset()
             return None
 
         shoulder = _mid(xy, L_SHOULDER, R_SHOULDER)
@@ -68,7 +73,8 @@ class FeatureExtractor:
         dx, dy = shoulder - hip
         torso_angle = math.degrees(math.atan2(abs(dx), -dy))
 
-        visible = xy[vis >= VISIBLE]
+        visible_mask = vis >= VISIBLE
+        visible = xy[visible_mask]
         if len(visible) >= 4:
             w, h = visible.max(axis=0) - visible.min(axis=0)
             aspect = float(w / max(h, 1.0))
@@ -82,13 +88,24 @@ class FeatureExtractor:
         leg_drop = (float(np.mean(ankles)) - hip_y) / scale if ankles else None
 
         if self._prev is not None:
-            prev_ts, prev_hip_y = self._prev
+            prev_ts, prev_hip_y, prev_xy, prev_visible = self._prev
             dt = (pose.ts_ms - prev_ts) / 1000
             if dt > 0:
                 raw_vy = (hip_y - prev_hip_y) / scale / dt
                 alpha = 1 - math.exp(-dt / self.cfg.velocity_tau_s)
                 self._vy += alpha * (raw_vy - self._vy)
-        self._prev = (pose.ts_ms, hip_y)
+
+                # Mean over landmarks seen in both frames, so a moving limb counts as well as the torso.
+                shared = visible_mask & prev_visible
+                if shared.sum() >= 4:
+                    raw_motion = float(np.linalg.norm(xy[shared] - prev_xy[shared], axis=1).mean()) / scale / dt
+                    if self._motion is None:
+                        self._motion = raw_motion
+                    else:
+                        self._motion += alpha * (raw_motion - self._motion)
+                else:
+                    self._motion = None
+        self._prev = (pose.ts_ms, hip_y, xy, visible_mask)
 
         return Features(
             ts_ms=pose.ts_ms,
@@ -97,6 +114,7 @@ class FeatureExtractor:
             head_y=head_y,
             aspect=aspect,
             hip_vy=self._vy,
+            motion=self._motion,
             leg_drop=leg_drop,
             scale=scale,
         )
